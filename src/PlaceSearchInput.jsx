@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { searchForPlaces } from './places.js'
 
-function PlaceSearchInput({ value, onChange, onSelect, details = '', placeholder = 'Place, address, or landmark', ariaLabel }) {
+function PlaceSearchInput({ value, onChange, onSelect, details = '', placeholder = 'Place, address, or landmark', ariaLabel, required = false }) {
   const [results, setResults] = useState([])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -55,7 +55,7 @@ function PlaceSearchInput({ value, onChange, onSelect, details = '', placeholder
   return (
     <div className="shared-place-search">
       <div className="shared-place-search-row">
-        <input aria-label={ariaLabel} value={value} onChange={(event) => updateQuery(event.target.value)} placeholder={placeholder} />
+        <input aria-label={ariaLabel} value={value} onChange={(event) => updateQuery(event.target.value)} placeholder={placeholder} required={required} />
         <button type="button" className="place-search-button" onClick={search} disabled={!value.trim() || isSearching}>
           {isSearching ? 'Searching…' : 'Search'}
         </button>

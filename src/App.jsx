@@ -16,47 +16,6 @@ import './Auth.css'
 const DayCalendar = lazy(() => import('./DayCalendar.jsx'))
 const routeCache = new Map()
 
-const initialDays = [
-  {
-    id: 'day-1',
-    label: 'Day 1',
-    date: 'Tue, Sep 14',
-    dateISO: '2027-09-14',
-    title: 'Arrive in Yosemite',
-    activities: [
-      { id: 'day-1-rental', time: '9:00 AM', durationMinutes: 60, title: 'Pick up the rental car', place: 'Fresno Yosemite International', type: 'Travel', cost: 85, coordinates: { lat: 36.7762, lng: -119.7182 } },
-      { id: 'day-1-lunch', time: '12:30 PM', durationMinutes: 60, title: 'Picnic lunch', place: 'Tunnel View', type: 'Food', cost: 24, coordinates: { lat: 37.7155, lng: -119.6775 } },
-      { id: 'day-1-falls', time: '2:00 PM', durationMinutes: 120, title: 'Lower Yosemite Fall Loop', place: 'Yosemite Valley', type: 'Hike', cost: 0, miles: 1.2, coordinates: { lat: 37.7562, lng: -119.5965 } },
-      { id: 'day-1-stay', time: '6:30 PM', durationMinutes: 60, title: 'Check in at Curry Village', place: 'Curry Village', type: 'Stay', cost: 189, coordinates: { lat: 37.7376, lng: -119.5703 } },
-    ],
-  },
-  {
-    id: 'day-2',
-    label: 'Day 2',
-    date: 'Wed, Sep 15',
-    dateISO: '2027-09-15',
-    title: 'A day on the trails',
-    activities: [
-      { id: 'day-2-breakfast', time: '7:30 AM', durationMinutes: 60, title: 'Breakfast at the lodge', place: 'Curry Village', type: 'Food', cost: 32, coordinates: { lat: 37.7376, lng: -119.5703 } },
-      { id: 'day-2-mist-trail', time: '9:00 AM', durationMinutes: 240, title: 'Mist Trail to Vernal Fall', place: 'Happy Isles Trailhead', type: 'Hike', cost: 0, miles: 3.0, coordinates: { lat: 37.7323, lng: -119.5582 } },
-      { id: 'day-2-lunch', time: '1:30 PM', durationMinutes: 90, title: 'Lunch and a lakeside break', place: 'Mirror Lake', type: 'Food', cost: 28, coordinates: { lat: 37.7466, lng: -119.5586 } },
-      { id: 'day-2-sunset', time: '5:00 PM', durationMinutes: 120, title: 'Sunset at Glacier Point', place: 'Glacier Point Road', type: 'Scenic', cost: 0, coordinates: { lat: 37.7275, lng: -119.5731 } },
-    ],
-  },
-  {
-    id: 'day-3',
-    label: 'Day 3',
-    date: 'Thu, Sep 16',
-    dateISO: '2027-09-16',
-    title: 'One last morning',
-    activities: [
-      { id: 'day-3-breakfast', time: '8:00 AM', durationMinutes: 60, title: 'Coffee and breakfast', place: 'Yosemite Valley', type: 'Food', cost: 26, coordinates: { lat: 37.7376, lng: -119.5703 } },
-      { id: 'day-3-valley-view', time: '9:30 AM', durationMinutes: 90, title: 'Valley View drive', place: 'Northside Drive', type: 'Scenic', cost: 0, coordinates: { lat: 37.7182, lng: -119.6603 } },
-      { id: 'day-3-return', time: '12:00 PM', durationMinutes: 180, title: 'Head back to Fresno', place: 'Fresno Yosemite International', type: 'Travel', cost: 0, coordinates: { lat: 36.7762, lng: -119.7182 } },
-    ],
-  },
-]
-
 function getTimeInMinutes(time) {
   const [clock, period] = time.split(' ')
   const [hour, minute] = clock.split(':').map(Number)
@@ -104,14 +63,6 @@ function getISODate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function formatTripDayDate(date) {
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  }).format(date)
-}
-
 function formatTripDateRange(startDateISO, dayCount) {
   const start = new Date(`${startDateISO}T12:00:00`)
   const end = new Date(start)
@@ -133,16 +84,61 @@ function formatTripDateRange(startDateISO, dayCount) {
     : `${format(start, false)}–${format(end, false)}, ${year}`
 }
 
+function formatActivityTime(time) {
+  const match = /^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i.exec(time ?? '')
+  if (!match) return time
+  let hour = Number(match[1])
+  const period = match[3]?.toUpperCase()
+  if (period) hour = (hour % 12) + (period === 'PM' ? 12 : 0)
+  return `${String(hour).padStart(2, '0')}:${match[2]}`
+}
+
+function importLegacyYosemiteActivities(trips, days) {
+  const legacyActivities = [...days]
+    .sort((first, second) => {
+      const getDayNumber = (day) => Number(/day-(\d+)/i.exec(day.id ?? '')?.[1] ?? day.dayNumber ?? 0)
+      return getDayNumber(first) - getDayNumber(second)
+    })
+    .flatMap((day, index) => (
+    (Array.isArray(day.activities) ? day.activities : [])
+      .filter((activity) => !activity.wishlistItemId)
+      .map((activity) => ({
+        ...activity,
+        time: formatActivityTime(activity.time),
+        dayNumber: index + 1,
+      }))
+  ))
+  if (legacyActivities.length === 0) return trips
+
+  return trips.map((trip) => {
+    if (trip.id !== 'yosemite') return trip
+    const activities = trip.activities ?? []
+    const activityIds = new Set(activities.map((activity) => activity.id))
+    const importedActivities = legacyActivities.filter((activity) => !activityIds.has(activity.id))
+    return {
+      ...trip,
+      tripDays: Math.max(
+        trip.tripDays ?? trip.days ?? 1,
+        ...importedActivities.map((activity) => activity.dayNumber),
+      ),
+      activities: [
+        ...activities,
+        ...importedActivities,
+      ],
+    }
+  })
+}
+
 function PlannerApp({ user }) {
   const [currentView, setCurrentView] = useState('lifetime')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [tripViewMode, setTripViewMode] = useState('days')
-  const [selectedTripId, setSelectedTripId] = useState('yosemite')
+  const [selectedTripId, setSelectedTripId] = useState(initialTrips[0]?.id ?? '')
   const [trips, setTrips] = useState(initialTrips)
   const [annualPlans, setAnnualPlans] = useState(initialAnnualPlans)
   const [wishlistItems, setWishlistItems] = useState(initialWishlist)
-  const [days, setDays] = useState(initialDays)
-  const [activeDayId, setActiveDayId] = useState(initialDays[0].id)
+  const [days, setDays] = useState([])
+  const [activeDayId, setActiveDayId] = useState('')
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [isEditingTripDetails, setIsEditingTripDetails] = useState(false)
   const [editingActivityId, setEditingActivityId] = useState(null)
@@ -183,11 +179,11 @@ function PlannerApp({ user }) {
       .then((data) => {
         if (!active) return
         savedPlannerData.current = data
-        setTrips(data.trips)
+        setTrips(importLegacyYosemiteActivities(data.trips, data.days))
         setAnnualPlans(data.annualPlans)
         setWishlistItems(data.wishlistItems)
         setDays(data.days)
-        setSelectedTripId(data.trips.find((trip) => trip.id === 'yosemite')?.id ?? data.trips[0]?.id ?? '')
+        setSelectedTripId(data.trips[0]?.id ?? '')
         setActiveDayId(data.days[0]?.id ?? '')
         setPlannerLoadState('ready')
       })
@@ -239,19 +235,17 @@ function PlannerApp({ user }) {
   }, [user.uid, plannerLoadState, trips, annualPlans, wishlistItems, days, saveAttempt])
 
   const selectedTrip = trips.find((trip) => trip.id === selectedTripId) ?? trips[0]
-  const minimumTripDays = selectedTripId === 'yosemite'
-    ? days.reduce((minimum, day, index) => day.activities.length ? index + 1 : minimum, 1)
-    : Math.max(
-      selectedTrip?.activities?.reduce(
-        (minimum, activity) => Math.max(minimum, activity.dayNumber),
-        1,
-      ) ?? 1,
-      wishlistItems.reduce((minimum, item) => (
+  const minimumTripDays = Math.max(
+    selectedTrip?.activities?.reduce(
+      (minimum, activity) => Math.max(minimum, activity.dayNumber),
+      1,
+    ) ?? 1,
+    wishlistItems.reduce((minimum, item) => (
       item.tripId === selectedTripId && item.schedule
         ? Math.max(minimum, item.schedule.dayNumber)
         : minimum
-      ), 1),
-    )
+    ), 1),
+  )
   const activeDay = days.find((day) => day.id === activeDayId)
   const routeStops = useMemo(() => activeDay?.activities ?? [], [activeDay])
   const mapPickerCenter = activityDraft.coordinates
@@ -262,10 +256,7 @@ function PlannerApp({ user }) {
       ? `${activity.coordinates.lng},${activity.coordinates.lat}`
       : '')
     .join(';')
-  const canCalculateRoute = currentView === 'trip'
-    && selectedTripId === 'yosemite'
-    && routeStops.length >= 2
-    && routeStops.every((activity) => activity.coordinates)
+  const canCalculateRoute = false
   const currentRouteResult = routeResult?.key === routeKey ? routeResult : null
   const route = currentRouteResult?.route ?? routeCache.get(routeKey) ?? null
   const routeError = currentRouteResult?.error ?? ''
@@ -353,29 +344,6 @@ function PlannerApp({ user }) {
   function updateTripDetails(updatedTrip) {
     setTrips((currentTrips) => currentTrips.map((trip) => trip.id === updatedTrip.id ? updatedTrip : trip))
     ensureAnnualPlan(updatedTrip.year)
-
-    if (updatedTrip.id === 'yosemite') {
-      const dayCount = Math.max(1, updatedTrip.tripDays ?? updatedTrip.days ?? 1)
-      const startDateISO = updatedTrip.startDateISO ?? `${updatedTrip.year}-01-01`
-      setDays((currentDays) => Array.from({ length: dayCount }, (_, index) => {
-        const date = new Date(`${startDateISO}T12:00:00`)
-        date.setDate(date.getDate() + index)
-        const dateISO = getISODate(date)
-        const existingDay = currentDays[index]
-        return {
-          ...existingDay,
-          id: `day-${index + 1}`,
-          label: `Day ${index + 1}`,
-          date: formatTripDayDate(date),
-          dateISO,
-          title: existingDay?.title ?? `Day ${index + 1}`,
-          activities: existingDay?.activities ?? [],
-        }
-      }))
-      setActiveDayId((currentDayId) => (
-        Number(currentDayId.replace('day-', '')) <= dayCount ? currentDayId : 'day-1'
-      ))
-    }
   }
 
   function saveTripActivity(tripId, activity) {
@@ -404,17 +372,6 @@ function PlannerApp({ user }) {
   }
 
   function updateWishlistItem(itemId, changes) {
-    const item = wishlistItems.find((currentItem) => currentItem.id === itemId)
-    if (
-      item?.tripId === 'yosemite'
-      && item.schedule
-      && changes.schedule === null
-    ) {
-      setDays((currentDays) => currentDays.map((day) => ({
-        ...day,
-        activities: day.activities.filter((activity) => activity.wishlistItemId !== itemId),
-      })))
-    }
     setWishlistItems((currentItems) => currentItems.map((item) => item.id === itemId ? { ...item, ...changes } : item))
   }
 
@@ -422,8 +379,6 @@ function PlannerApp({ user }) {
     const item = wishlistItems.find((currentItem) => currentItem.id === itemId)
     if (!item) return
 
-    const [hour, minute] = schedule.time.split(':').map(Number)
-    const displayTime = `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`
     const scheduledItem = {
       ...item,
       tripId: schedule.tripId,
@@ -433,33 +388,6 @@ function PlannerApp({ user }) {
         durationMinutes: schedule.durationMinutes,
       },
       status: item.status === 'Visited' ? 'Visited' : 'Scheduled',
-    }
-
-    if (item.tripId === 'yosemite' || schedule.tripId === 'yosemite') {
-      setDays((currentDays) => currentDays.map((day, index) => {
-        const remainingActivities = day.activities.filter((activity) => activity.wishlistItemId !== itemId)
-        if (schedule.tripId !== 'yosemite' || index + 1 !== schedule.dayNumber) {
-          return { ...day, activities: remainingActivities }
-        }
-
-        const activity = {
-          id: `wishlist-${itemId}`,
-          wishlistItemId: itemId,
-          time: displayTime,
-          durationMinutes: schedule.durationMinutes,
-          title: item.name,
-          place: item.location,
-          type: 'Other',
-          cost: Number(item.estimatedCost || 0),
-          coordinates: item.coordinates ?? null,
-          locationDetails: item.details ?? '',
-        }
-        return {
-          ...day,
-          activities: [...remainingActivities, activity]
-            .sort((first, second) => getTimeInMinutes(first.time) - getTimeInMinutes(second.time)),
-        }
-      }))
     }
 
     setWishlistItems((currentItems) => currentItems.map((currentItem) => (
@@ -913,14 +841,6 @@ function PlannerApp({ user }) {
             <strong aria-current="page">{currentView === 'lifetime' ? 'Lifetime overview' : currentView === 'wishlist' ? 'Wish list' : selectedTrip.name}</strong>
           </div>
           <div className="topbar-actions">
-            {currentView === 'trip' && selectedTripId === 'yosemite' && (
-              <>
-                <span className="draft-status"><span className="status-dot" /> Draft</span>
-                <button className="share-button" type="button" onClick={() => setIsShareInfoOpen(true)}>
-                  <span aria-hidden="true">↗</span> Share
-                </button>
-              </>
-            )}
             {saveError
               ? <span className="planner-save-error" role="alert">Save failed: {saveError}</span>
               : <span className="planner-save-status" aria-live="polite">
@@ -967,8 +887,9 @@ function PlannerApp({ user }) {
           />
         )}
 
-        {currentView === 'trip' && selectedTripId !== 'yosemite' && selectedTrip && (
+        {currentView === 'trip' && selectedTrip && (
           <TripPreview
+            key={selectedTrip.id}
             trip={selectedTrip}
             minTripDays={minimumTripDays}
             wishlist={wishlistItems}
@@ -983,7 +904,7 @@ function PlannerApp({ user }) {
           />
         )}
 
-        {currentView === 'trip' && selectedTripId === 'yosemite' && (
+        {currentView === 'trip' && selectedTripId === 'yosemite' && tripViewMode === 'legacy' && (
         <div className="page-wrap">
           <section className="trip-heading">
             <div className="trip-heading-title">

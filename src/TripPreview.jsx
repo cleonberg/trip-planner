@@ -2,6 +2,7 @@ import { Suspense, lazy, useMemo, useState } from 'react'
 import ScheduleItemForm from './ScheduleItemForm.jsx'
 import TripActivityForm from './TripActivityForm.jsx'
 import TripDetailsForm from './TripDetailsForm.jsx'
+import TripRouteMap from './TripRouteMap.jsx'
 import './TripPreview.css'
 
 const TripCalendar = lazy(() => import('./TripCalendar.jsx'))
@@ -41,11 +42,12 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   const [isAddingIdea, setIsAddingIdea] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [editingActivityId, setEditingActivityId] = useState(null)
+  const [routeDayNumber, setRouteDayNumber] = useState(1)
   const tripExperiences = useMemo(
     () => wishlist.filter((item) => item.tripId === trip.id),
     [trip.id, wishlist],
   )
-  const tripActivities = trip.activities ?? []
+  const tripActivities = useMemo(() => trip.activities ?? [], [trip.activities])
   const scheduledItems = useMemo(
     () => tripExperiences
       .filter((item) => item.schedule)
@@ -57,11 +59,12 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
     () => getTripCalendarDays(trip),
     [trip],
   )
-  const scheduledEntries = [
+  const scheduledEntries = useMemo(() => [
     ...scheduledItems.map((item) => ({
       id: item.id,
       title: item.name,
       place: item.location,
+      coordinates: item.coordinates,
       cost: item.estimatedCost,
       dayNumber: item.schedule.dayNumber,
       time: item.schedule.time,
@@ -70,7 +73,10 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
       kind: 'idea',
     })),
     ...tripActivities.map((activity) => ({ ...activity, kind: 'activity' })),
-  ].sort((first, second) => first.dayNumber - second.dayNumber || first.time.localeCompare(second.time))
+  ].sort((first, second) => first.dayNumber - second.dayNumber || first.time.localeCompare(second.time)), [
+    scheduledItems,
+    tripActivities,
+  ])
   const calendarEvents = useMemo(() => scheduledEntries.flatMap((item) => {
     const day = calendarDays[item.dayNumber - 1]
     if (!day) return []
@@ -91,6 +97,11 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   const unscheduledItems = tripExperiences.filter((item) => !item.schedule)
   const availableIdeas = wishlist.filter((item) => !item.tripId)
   const scheduleDays = [...new Set(scheduledEntries.map((item) => item.dayNumber))]
+  const activeRouteDayNumber = Math.min(routeDayNumber, calendarDays.length)
+  const routeItems = useMemo(
+    () => scheduledEntries.filter((item) => item.dayNumber === activeRouteDayNumber),
+    [activeRouteDayNumber, scheduledEntries],
+  )
   const editingScheduledItem = tripExperiences.find((item) => item.id === schedulingItemId && item.schedule)
   const editingActivity = tripActivities.find((activity) => activity.id === editingActivityId)
 
@@ -283,6 +294,19 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
             }}
           />
         )}
+      </section>
+
+      <section className="trip-preview-experiences">
+        <div className="section-heading">
+          <div><p className="eyebrow">Getting around</p><h2>Routes for the day</h2></div>
+          <label className="trip-route-day-select">
+            <span>Trip day</span>
+            <select value={activeRouteDayNumber} onChange={(event) => setRouteDayNumber(Number(event.target.value))}>
+              {calendarDays.map((day, index) => <option key={day.id} value={index + 1}>Day {index + 1}</option>)}
+            </select>
+          </label>
+        </div>
+        <TripRouteMap items={routeItems} dayLabel={`Day ${activeRouteDayNumber}`} />
       </section>
 
       <section className="trip-preview-experiences">

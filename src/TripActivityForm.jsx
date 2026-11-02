@@ -1,11 +1,20 @@
 import { useState } from 'react'
+import PlaceSearchInput from './PlaceSearchInput.jsx'
 
-const activityTypes = ['Travel', 'Food', 'Stay', 'Scenic', 'Hike', 'Other']
+const activityTypes = ['Travel', 'Flight', 'Food', 'Stay', 'Scenic', 'Hike', 'Other']
 
 function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
   const [title, setTitle] = useState(activity?.title ?? '')
   const [type, setType] = useState(activity?.type ?? 'Travel')
   const [place, setPlace] = useState(activity?.place ?? '')
+  const [coordinates, setCoordinates] = useState(activity?.coordinates ?? null)
+  const [locationDetails, setLocationDetails] = useState(activity?.locationDetails ?? '')
+  const [origin, setOrigin] = useState(activity?.origin ?? '')
+  const [originDetails, setOriginDetails] = useState(activity?.originDetails ?? '')
+  const [originCoordinates, setOriginCoordinates] = useState(activity?.originCoordinates ?? null)
+  const [destination, setDestination] = useState(activity?.destination ?? '')
+  const [destinationDetails, setDestinationDetails] = useState(activity?.destinationDetails ?? '')
+  const [destinationCoordinates, setDestinationCoordinates] = useState(activity?.destinationCoordinates ?? null)
   const [dayNumber, setDayNumber] = useState(activity?.dayNumber ?? 1)
   const [time, setTime] = useState(activity?.time ?? '09:00')
   const [durationMinutes, setDurationMinutes] = useState(activity?.durationMinutes ?? 60)
@@ -13,11 +22,26 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
 
   function handleSubmit(event) {
     event.preventDefault()
+    const location = type === 'Flight'
+      ? {
+          place: `${origin.trim()} → ${destination.trim()}`,
+          origin: origin.trim(),
+          originDetails,
+          originCoordinates,
+          destination: destination.trim(),
+          destinationDetails,
+          destinationCoordinates,
+        }
+      : {
+          place: place.trim(),
+          coordinates,
+          locationDetails,
+        }
     onSave({
       ...(activity?.id ? { id: activity.id } : {}),
       title: title.trim(),
       type,
-      place: place.trim(),
+      ...location,
       dayNumber: Number(dayNumber),
       time,
       durationMinutes: Number(durationMinutes),
@@ -42,10 +66,71 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
             {activityTypes.map((activityType) => <option key={activityType}>{activityType}</option>)}
           </select>
         </label>
-        <label>
-          <span>Location or route</span>
-          <input value={place} onChange={(event) => setPlace(event.target.value)} placeholder="e.g. TRI airport → Lima airport" />
-        </label>
+        {type === 'Flight'
+          ? (
+            <>
+              <label>
+                <span>Departure airport</span>
+                <PlaceSearchInput
+                  ariaLabel="Departure airport"
+                  value={origin}
+                  details={originDetails}
+                  required
+                  placeholder="Search airport or city"
+                  onChange={(value) => {
+                    setOrigin(value)
+                    setOriginDetails('')
+                    setOriginCoordinates(null)
+                  }}
+                  onSelect={(selectedPlace) => {
+                    setOrigin(selectedPlace.name)
+                    setOriginDetails(selectedPlace.details)
+                    setOriginCoordinates(selectedPlace.coordinates)
+                  }}
+                />
+              </label>
+              <label>
+                <span>Arrival airport</span>
+                <PlaceSearchInput
+                  ariaLabel="Arrival airport"
+                  value={destination}
+                  details={destinationDetails}
+                  required
+                  placeholder="Search airport or city"
+                  onChange={(value) => {
+                    setDestination(value)
+                    setDestinationDetails('')
+                    setDestinationCoordinates(null)
+                  }}
+                  onSelect={(selectedPlace) => {
+                    setDestination(selectedPlace.name)
+                    setDestinationDetails(selectedPlace.details)
+                    setDestinationCoordinates(selectedPlace.coordinates)
+                  }}
+                />
+              </label>
+            </>
+          )
+          : (
+            <label>
+              <span>Location</span>
+              <PlaceSearchInput
+                ariaLabel="Activity location"
+                value={place}
+                details={locationDetails}
+                onChange={(value) => {
+                  setPlace(value)
+                  setCoordinates(null)
+                  setLocationDetails('')
+                }}
+                onSelect={(selectedPlace) => {
+                  setPlace(selectedPlace.name)
+                  setCoordinates(selectedPlace.coordinates)
+                  setLocationDetails(selectedPlace.details)
+                }}
+              />
+            </label>
+          )}
         <label>
           <span>Trip day</span>
           <select value={dayNumber} onChange={(event) => setDayNumber(Number(event.target.value))}>

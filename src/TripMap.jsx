@@ -38,7 +38,7 @@ function MapClickHandler({ onLocationSelect }) {
   return null
 }
 
-function TripMap({ activities, routeCoordinates = [], selectedLocation, initialCenter, onLocationSelect }) {
+function TripMap({ activities, routeCoordinates = [], routeSegments = [], selectedLocation, initialCenter, onLocationSelect }) {
   const points = useMemo(
     () => activities
       .filter((activity) => activity.coordinates)
@@ -75,6 +75,15 @@ function TripMap({ activities, routeCoordinates = [], selectedLocation, initialC
       {routePositions.length > 1 && (
         <Polyline positions={routePositions} pathOptions={{ color: '#427353', weight: 5, opacity: 0.8 }} />
       )}
+      {routeSegments.map((segment, index) => (
+        <Polyline
+          key={`${segment.type}-${index}`}
+          positions={segment.coordinates}
+          pathOptions={segment.type === 'flight'
+            ? { color: '#a15e39', weight: 3, opacity: 0.9, dashArray: '8 8' }
+            : { color: '#427353', weight: 5, opacity: 0.8 }}
+        />
+      ))}
       {activities.map((activity, index) => activity.coordinates && (
         <CircleMarker
           center={[activity.coordinates.lat, activity.coordinates.lng]}

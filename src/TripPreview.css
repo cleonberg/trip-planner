@@ -49,3 +49,156 @@
     flex-direction: column;
   }
 }
+
+.trip-route-day-select {
+  display: grid;
+  gap: 5px;
+  color: #66736b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.trip-route-day-select select {
+  min-width: 120px;
+  border: 1px solid #dfe5df;
+  border-radius: 8px;
+  background: #fff;
+  color: #203d34;
+  padding: 9px 11px;
+  font: inherit;
+}
+
+.trip-route-section {
+  border: 1px solid #e8ebe6;
+  border-radius: 14px;
+  background: #fff;
+  padding: 18px;
+}
+
+.trip-route-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.trip-route-heading .eyebrow,
+.trip-route-heading h3,
+.trip-route-attribution {
+  margin: 0;
+}
+
+.trip-route-heading h3 {
+  color: #203d34;
+  font-size: 18px;
+}
+
+.trip-route-heading > span,
+.trip-route-attribution {
+  color: #66736b;
+  font-size: 12px;
+}
+
+.trip-route-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+  gap: 18px;
+}
+
+.trip-route-map {
+  min-height: 340px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.trip-route-map .trip-map {
+  height: 340px;
+}
+
+.trip-route-details {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+  color: #66736b;
+  font-size: 13px;
+}
+
+.trip-route-details > p,
+.trip-route-error p {
+  margin: 0;
+}
+
+.trip-route-leg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #e8ebe6;
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+
+.trip-route-leg > span {
+  display: grid;
+  flex: 0 0 25px;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e9f0e9;
+  color: #315a49;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trip-route-leg:has(> span:first-child) > div {
+  min-width: 0;
+}
+
+.trip-route-leg strong {
+  color: #203d34;
+  font-size: 13px;
+}
+
+.trip-route-leg strong small {
+  color: #89938c;
+  font-weight: 400;
+}
+
+.trip-route-leg p {
+  margin: 5px 0 0;
+}
+
+.trip-route-error button {
+  margin-top: 8px;
+  border: 0;
+  background: none;
+  color: #315a49;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+}
+
+.trip-route-attribution {
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .trip-route-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .trip-route-map,
+  .trip-route-map .trip-map {
+    min-height: 280px;
+    height: 280px;
+  }
+
+  .trip-route-details {
+    max-height: none;
+  }
+}
