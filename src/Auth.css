@@ -1,0 +1,69 @@
+.firebase-gate {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 24px;
+  background: #f7f8f6;
+}
+
+.firebase-gate-card {
+  display: grid;
+  width: min(100%, 420px);
+  gap: 16px;
+  box-sizing: border-box;
+  border: 1px solid #e8ebe6;
+  border-radius: 18px;
+  background: #fff;
+  padding: 32px;
+  box-shadow: 0 16px 48px rgb(32 61 52 / 8%);
+}
+
+.firebase-gate-card .brand {
+  margin: 0 0 8px;
+}
+
+.firebase-gate-card h1,
+.firebase-gate-card p {
+  margin: 0;
+}
+
+.firebase-gate-card h1 {
+  color: #203d34;
+  font-size: 24px;
+}
+
+.firebase-gate-card p {
+  color: #66736b;
+  line-height: 1.55;
+}
+
+.firebase-gate-card .firebase-gate-error {
+  color: #a33232;
+}
+
+.firebase-gate-card .primary-button {
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.planner-save-status {
+  color: #66736b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.planner-save-error {
+  max-width: 260px;
+  overflow: hidden;
+  color: #a33232;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .planner-save-error {
+    display: none;
+  }
+}

@@ -1,0 +1,51 @@
+.trip-ideas-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.trip-idea-picker {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.trip-idea-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #e8ebe6;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.trip-idea-option h3,
+.trip-idea-option p {
+  margin: 0;
+}
+
+.trip-idea-option h3 {
+  color: #203d34;
+  font-size: 15px;
+}
+
+.trip-idea-option p {
+  margin-top: 5px;
+  color: #66736b;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .trip-ideas-heading-actions {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .trip-idea-option {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
