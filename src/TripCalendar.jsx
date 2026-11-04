@@ -2,7 +2,7 @@ import FullCalendar from '@fullcalendar/react'
 import interactionPlugin from '@fullcalendar/interaction'
 import timeGridPlugin from '@fullcalendar/timegrid'
 
-function TripCalendar({ days, events, onEventDrop, onEventResize, onEventClick, dayLabelsOnly = false }) {
+function TripCalendar({ days, events, eventAllow, onEventDrop, onEventResize, onEventClick, dayLabelsOnly = false }) {
   const views = {
     tripSchedule: {
       type: 'timeGrid',
@@ -41,7 +41,7 @@ function TripCalendar({ days, events, onEventDrop, onEventResize, onEventClick, 
         eventStartEditable
         eventDurationEditable
         eventResizableFromStart
-        eventConstraint={{ start: '06:00', end: '23:00' }}
+        eventAllow={eventAllow}
         eventLongPressDelay={300}
         events={events}
         eventDrop={onEventDrop}

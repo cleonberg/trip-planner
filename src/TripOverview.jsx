@@ -5,7 +5,7 @@ const TripCalendar = lazy(() => import('./TripCalendar.jsx'))
 const dayColors = ['#315a49', '#4b7f75', '#a16e3e', '#687da0', '#8a6685', '#71894e', '#b35e4e']
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
-function TripOverview({ days, events, onOpenDay, onEventDrop, onEventResize, onEventClick }) {
+function TripOverview({ days, events, eventAllow, onOpenDay, onEventDrop, onEventResize, onEventClick }) {
   const mappedActivities = useMemo(() => days.flatMap((day, index) => day.activities.map((activity) => ({
     ...activity,
     time: `${day.label} · ${activity.time}`,
@@ -78,6 +78,7 @@ function TripOverview({ days, events, onOpenDay, onEventDrop, onEventResize, onE
             key={`${days[0]?.dateISO}-${days.length}`}
             days={days}
             events={events}
+            eventAllow={eventAllow}
             onEventDrop={onEventDrop}
             onEventResize={onEventResize}
             onEventClick={onEventClick}

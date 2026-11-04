@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import TripMap from './TripMap.jsx'
 import PlaceSearchInput from './PlaceSearchInput.jsx'
 import ScheduleItemForm from './ScheduleItemForm.jsx'
@@ -13,8 +13,8 @@ function WishlistForm({ trips, onAdd, onCancel }) {
   const [coordinates, setCoordinates] = useState(null)
   const [season, setSeason] = useState('')
   const [priority, setPriority] = useState('Medium')
-  const [estimatedDays, setEstimatedDays] = useState(1)
-  const [estimatedCost, setEstimatedCost] = useState(0)
+  const [estimatedDays, setEstimatedDays] = useState('1')
+  const [estimatedCost, setEstimatedCost] = useState('0')
   const [tripId, setTripId] = useState('')
 
   function handleSubmit(event) {
@@ -27,8 +27,8 @@ function WishlistForm({ trips, onAdd, onCancel }) {
       coordinates,
       season: season.trim() || 'Any season',
       priority,
-      estimatedDays,
-      estimatedCost,
+      estimatedDays: Number(estimatedDays),
+      estimatedCost: Number(estimatedCost),
       status: tripId ? 'Assigned' : 'Wishlist',
       tripId: tripId || null,
     })
@@ -77,11 +77,11 @@ function WishlistForm({ trips, onAdd, onCancel }) {
         </label>
         <label className="form-field">
           <span>Estimated days</span>
-          <input required type="number" min="1" value={estimatedDays} onChange={(event) => setEstimatedDays(Number(event.target.value))} />
+          <input required type="number" min="1" value={estimatedDays} onChange={(event) => setEstimatedDays(event.target.value)} />
         </label>
         <label className="form-field">
           <span>Estimated cost ($)</span>
-          <input required type="number" min="0" value={estimatedCost} onChange={(event) => setEstimatedCost(Number(event.target.value))} />
+          <input required type="number" min="0" value={estimatedCost} onChange={(event) => setEstimatedCost(event.target.value)} />
         </label>
         <label className="form-field wishlist-trip-select">
           <span>Assign to a trip</span>
@@ -99,10 +99,11 @@ function WishlistForm({ trips, onAdd, onCancel }) {
   )
 }
 
-function WishlistView({ items, trips, onUpdateItem, onAddItem, onOpenTrip, onScheduleItem }) {
+function WishlistView({ items, trips, onUpdateItem, onAddItem, onOpenTrip, onScheduleItem, focusItemId }) {
   const [activeFilter, setActiveFilter] = useState('All')
   const [isAdding, setIsAdding] = useState(false)
   const [schedulingItemId, setSchedulingItemId] = useState(null)
+  const [highlightedItemId, setHighlightedItemId] = useState('')
   const tripById = useMemo(() => new Map(trips.map((trip) => [trip.id, trip])), [trips])
   const visibleItems = activeFilter === 'All'
     ? items
@@ -116,6 +117,23 @@ function WishlistView({ items, trips, onUpdateItem, onAddItem, onOpenTrip, onSch
     coordinates: item.coordinates,
     mapStatus: item.status.toLowerCase(),
   }))
+
+  useEffect(() => {
+    if (!focusItemId) return undefined
+
+    const frame = window.requestAnimationFrame(() => {
+      setHighlightedItemId(focusItemId)
+      const card = document.getElementById(`wishlist-item-${focusItemId}`)
+      if (!card) return
+      card.focus({ preventScroll: true })
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    const timeout = window.setTimeout(() => setHighlightedItemId(''), 3000)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(timeout)
+    }
+  }, [focusItemId])
 
   function handleAssignment(item, nextTripId) {
     if ((item.tripId ?? '') === nextTripId) return
@@ -189,7 +207,12 @@ function WishlistView({ items, trips, onUpdateItem, onAddItem, onOpenTrip, onSch
               {visibleItems.map((item) => {
                 const trip = tripById.get(item.tripId)
                 return (
-                  <article className="wishlist-card" key={item.id}>
+                  <article
+                    className={`wishlist-card${highlightedItemId === item.id ? ' wishlist-card-highlighted' : ''}`}
+                    id={`wishlist-item-${item.id}`}
+                    key={item.id}
+                    tabIndex={-1}
+                  >
                     <div className="wishlist-card-topline">
                       <span className={`trip-status status-${item.status.toLowerCase()}`}>{item.status}</span>
                       <span className={`priority-label priority-${item.priority.toLowerCase()}`}>{item.priority} priority</span>

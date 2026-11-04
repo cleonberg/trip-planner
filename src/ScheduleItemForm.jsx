@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import DurationInput from './DurationInput.jsx'
 
 function ScheduleItemForm({ item, trips, fixedTripId, onSave, onCancel, onRemove }) {
   const [tripId, setTripId] = useState(fixedTripId ?? item.tripId ?? '')
   const [dayNumber, setDayNumber] = useState(item.schedule?.dayNumber ?? 1)
   const [time, setTime] = useState(item.schedule?.time ?? '09:00')
-  const [durationMinutes, setDurationMinutes] = useState(item.schedule?.durationMinutes ?? 120)
+  const [durationMinutes, setDurationMinutes] = useState(String(item.schedule?.durationMinutes ?? 120))
   const trip = trips.find((availableTrip) => availableTrip.id === tripId)
   const dayCount = Math.max(1, trip?.tripDays ?? trip?.days ?? 1)
 
@@ -22,7 +23,7 @@ function ScheduleItemForm({ item, trips, fixedTripId, onSave, onCancel, onRemove
       tripId,
       dayNumber,
       time,
-      durationMinutes,
+      durationMinutes: Number(durationMinutes),
     })
   }
 
@@ -54,10 +55,7 @@ function ScheduleItemForm({ item, trips, fixedTripId, onSave, onCancel, onRemove
           <span>Start time</span>
           <input required type="time" min="06:00" max="22:45" value={time} onChange={(event) => setTime(event.target.value)} />
         </label>
-        <label>
-          <span>Duration (minutes)</span>
-          <input required type="number" min="15" max="1020" step="15" value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} />
-        </label>
+        <DurationInput value={durationMinutes} maxMinutes={1020} onChange={setDurationMinutes} />
       </div>
       <div className="schedule-item-actions">
         {item.schedule && onRemove && <button className="text-button unschedule-button" type="button" onClick={onRemove}>Remove from schedule</button>}

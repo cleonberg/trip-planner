@@ -6,6 +6,7 @@ import TripPreview from './TripPreview.jsx'
 import TripOverview from './TripOverview.jsx'
 import WishlistView from './WishlistView.jsx'
 import TripDetailsForm from './TripDetailsForm.jsx'
+import DurationInput from './DurationInput.jsx'
 import { initialAnnualPlans, initialTrips, initialWishlist } from './plannerData.js'
 import { searchForPlaces } from './places.js'
 import { auth } from './firebase.js'
@@ -131,6 +132,7 @@ function importLegacyYosemiteActivities(trips, days) {
 
 function PlannerApp({ user }) {
   const [currentView, setCurrentView] = useState('lifetime')
+  const [wishlistFocusItemId, setWishlistFocusItemId] = useState('')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [tripViewMode, setTripViewMode] = useState('days')
   const [selectedTripId, setSelectedTripId] = useState(initialTrips[0]?.id ?? '')
@@ -247,6 +249,14 @@ function PlannerApp({ user }) {
     ), 1),
   )
   const activeDay = days.find((day) => day.id === activeDayId)
+  const activeDayIndex = Math.max(0, days.findIndex((day) => day.id === activeDayId))
+  const activityStartMinutes = activityDraft.time ? getTimeInMinutes(activityDraft.time) : 6 * 60
+  const activityMaxDurationMinutes = Math.max(
+    15,
+    activityDraft.type === 'Stay'
+      ? (days.length - activeDayIndex) * 24 * 60 + 23 * 60 - activityStartMinutes
+      : 23 * 60 - activityStartMinutes,
+  )
   const routeStops = useMemo(() => activeDay?.activities ?? [], [activeDay])
   const mapPickerCenter = activityDraft.coordinates
     ?? activeDay?.activities.find((activity) => activity.coordinates)?.coordinates
@@ -398,6 +408,12 @@ function PlannerApp({ user }) {
   function openTrip(trip) {
     setSelectedTripId(trip.id)
     setCurrentView('trip')
+    setIsMobileMenuOpen(false)
+  }
+
+  function openWishlistItem(itemId) {
+    setWishlistFocusItemId(itemId)
+    setCurrentView('wishlist')
     setIsMobileMenuOpen(false)
   }
 
@@ -611,10 +627,27 @@ function PlannerApp({ user }) {
     if (!day) return false
     const earliestStart = getCalendarDateTime(day.dateISO, '6:00 AM')
     const latestEnd = getCalendarDateTime(day.dateISO, '11:00 PM')
+    if (event.start < earliestStart || event.start >= latestEnd) return false
+    if (event.extendedProps?.type === 'Stay') {
+      const lastTripDay = days[days.length - 1]
+      if (!lastTripDay) return false
+      const latestStayEnd = getCalendarDateTime(lastTripDay.dateISO, '11:00 PM')
+      latestStayEnd.setDate(latestStayEnd.getDate() + 1)
+      return event.end <= latestStayEnd
+    }
     const lastOccupiedMinute = new Date(event.end.getTime() - 1)
-    return event.start >= earliestStart
-      && event.end <= latestEnd
+    return event.end <= latestEnd
       && getTripDayForDate(lastOccupiedMinute)?.id === day.id
+  }
+
+  function canMoveEventWithinSchedule(dropInfo, draggedEvent) {
+    if (!dropInfo.start || !draggedEvent.start || !draggedEvent.end) return false
+    const end = dropInfo.end ?? new Date(dropInfo.start.getTime() + draggedEvent.end.getTime() - draggedEvent.start.getTime())
+    return isEventWithinSchedule({
+      start: dropInfo.start,
+      end,
+      extendedProps: draggedEvent.extendedProps,
+    })
   }
 
   function handleEventDrop({ event, revert }) {
@@ -814,6 +847,7 @@ function PlannerApp({ user }) {
             <span>▤</span> Lifetime overview
           </button>
           <button className={`nav-item${currentView === 'wishlist' ? ' active' : ''}`} type="button" onClick={() => {
+            setWishlistFocusItemId('')
             setCurrentView('wishlist')
             setIsMobileMenuOpen(false)
           }}>
@@ -884,6 +918,7 @@ function PlannerApp({ user }) {
             onAddItem={(item) => setWishlistItems((currentItems) => [...currentItems, item])}
             onOpenTrip={openTrip}
             onScheduleItem={scheduleWishlistItem}
+            focusItemId={wishlistFocusItemId}
           />
         )}
 
@@ -895,7 +930,7 @@ function PlannerApp({ user }) {
             wishlist={wishlistItems}
             trips={trips}
             onBack={() => setCurrentView('lifetime')}
-            onOpenWishlist={() => setCurrentView('wishlist')}
+            onOpenWishlistItem={openWishlistItem}
             onScheduleItem={scheduleWishlistItem}
             onSaveActivity={saveTripActivity}
             onRemoveActivity={removeTripActivity}
@@ -981,6 +1016,7 @@ function PlannerApp({ user }) {
             <TripOverview
               days={days}
               events={tripCalendarEvents}
+              eventAllow={canMoveEventWithinSchedule}
               onOpenDay={(dayId) => {
                 closeActivityForm()
                 setActiveDayId(dayId)
@@ -1087,7 +1123,11 @@ function PlannerApp({ user }) {
                   <label>Type<select value={activityDraft.type} onChange={(event) => setActivityDraft({ ...activityDraft, type: event.target.value })}><option>Hike</option><option>Food</option><option>Travel</option><option>Stay</option><option>Scenic</option><option>Other</option></select></label>
                   <label>Cost ($)<input type="number" min="0" step="0.01" value={activityDraft.cost} onChange={(event) => setActivityDraft({ ...activityDraft, cost: event.target.value })} placeholder="0" /></label>
                   <label>Distance (mi)<input type="number" min="0" step="0.1" value={activityDraft.miles} onChange={(event) => setActivityDraft({ ...activityDraft, miles: event.target.value })} placeholder="Optional" /></label>
-                  <label>Duration (minutes)<input required type="number" min="15" max={Math.max(15, 23 * 60 - (activityDraft.time ? getTimeInMinutes(activityDraft.time) : 6 * 60))} step="15" value={activityDraft.durationMinutes} onChange={(event) => setActivityDraft({ ...activityDraft, durationMinutes: event.target.value })} /></label>
+                  <DurationInput
+                    value={activityDraft.durationMinutes}
+                    maxMinutes={activityMaxDurationMinutes}
+                    onChange={(durationMinutes) => setActivityDraft({ ...activityDraft, durationMinutes })}
+                  />
                 </div>
                 {placeSearchError && <p className="place-search-feedback search-error" role="alert">{placeSearchError}</p>}
                 {placeSearchMessage && <p className="place-search-feedback" aria-live="polite">{placeSearchMessage}</p>}
@@ -1124,6 +1164,7 @@ function PlannerApp({ user }) {
                     dayId={activeDay.id}
                     date={activeDay.dateISO}
                     events={calendarEvents}
+                    eventAllow={canMoveEventWithinSchedule}
                     onTimeSelect={handleTimeSelect}
                     onEventDrop={handleEventDrop}
                     onEventResize={handleEventResize}

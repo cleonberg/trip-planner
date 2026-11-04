@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import PlaceSearchInput from './PlaceSearchInput.jsx'
+import DurationInput from './DurationInput.jsx'
 
 const activityTypes = ['Travel', 'Flight', 'Food', 'Stay', 'Scenic', 'Hike', 'Other']
 
@@ -17,8 +18,15 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
   const [destinationCoordinates, setDestinationCoordinates] = useState(activity?.destinationCoordinates ?? null)
   const [dayNumber, setDayNumber] = useState(activity?.dayNumber ?? 1)
   const [time, setTime] = useState(activity?.time ?? '09:00')
-  const [durationMinutes, setDurationMinutes] = useState(activity?.durationMinutes ?? 60)
-  const [cost, setCost] = useState(activity?.cost ?? '')
+  const [durationMinutes, setDurationMinutes] = useState(String(activity?.durationMinutes ?? 60))
+  const [cost, setCost] = useState(String(activity?.cost ?? ''))
+  const startMinutes = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
+  const maxDurationMinutes = Math.max(
+    15,
+    type === 'Stay'
+      ? (tripDays - Number(dayNumber) + 1) * 24 * 60 + 23 * 60 - startMinutes
+      : 23 * 60 - startMinutes,
+  )
 
   function handleSubmit(event) {
     event.preventDefault()
@@ -141,10 +149,7 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
           <span>Start time</span>
           <input required type="time" min="06:00" max="22:45" value={time} onChange={(event) => setTime(event.target.value)} />
         </label>
-        <label>
-          <span>Duration (minutes)</span>
-          <input required type="number" min="15" max={Math.max(15, 23 * 60 - (Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))))} step="15" value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} />
-        </label>
+        <DurationInput value={durationMinutes} maxMinutes={maxDurationMinutes} onChange={setDurationMinutes} />
         <label>
           <span>Cost ($)</span>
           <input type="number" min="0" step="0.01" value={cost} onChange={(event) => setCost(event.target.value)} placeholder="0" />

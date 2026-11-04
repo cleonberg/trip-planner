@@ -45,7 +45,7 @@
 .sidebar-section-label {
   padding: 0 10px;
   color: #9aa39d;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 1.15px;
 }
@@ -436,7 +436,7 @@
 .card-detail {
   margin-top: 5px;
   color: #929a94;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .itinerary-section {
@@ -521,7 +521,7 @@
 
 .day-tab small {
   color: #9aa29b;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .day-tab.selected {
@@ -946,6 +946,30 @@
   font-weight: 600;
 }
 
+.duration-input {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.duration-input legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  color: #66746a;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.duration-input label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .form-grid input,
 .form-grid select {
   width: 100%;
@@ -983,7 +1007,7 @@
 
 .place-search-note {
   color: #a0a9a2;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 400;
 }
 
@@ -995,7 +1019,7 @@
   background: #f7f9f6;
   color: #52715e;
   font: inherit;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -1012,7 +1036,7 @@
 .place-search-feedback {
   margin: 10px 0 0;
   color: #607966;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .place-search-feedback.search-error {
@@ -1046,19 +1070,19 @@
 
 .place-result-name {
   color: #40564a;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 650;
 }
 
 .place-result-details {
   color: #89948c;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .place-search-attribution {
   margin: 2px 0 0;
   color: #9aa39c;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .form-actions {
@@ -1583,8 +1607,7 @@
 .lifetime-map-panel,
 .wishlist-map-panel,
 .trip-create-form,
-.trip-preview-experiences,
-.trip-preview-calendar-link {
+.trip-preview-experiences {
   margin-bottom: 24px;
   padding: 19px;
   border: 1px solid #e8ece7;
@@ -1618,10 +1641,89 @@
   line-height: 1.5;
 }
 
-.lifetime-map-panel .trip-map,
+.lifetime-map-panel .trip-map {
+  height: 440px;
+  border-radius: 7px;
+}
+
 .wishlist-map-panel .trip-map {
   height: 360px;
   border-radius: 7px;
+}
+
+.lifetime-map-panel .trip-map:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+.map-toolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1100;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  max-width: calc(100% - 58px);
+  padding: 7px;
+  border: 1px solid #dfe6df;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 2px 8px rgb(34 54 42 / 14%);
+}
+
+.map-toolbar-actions,
+.map-toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.map-toolbar-button,
+.map-filter-button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid #dfe6df;
+  border-radius: 5px;
+  background: #fff;
+  color: #43584a;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.map-toolbar-button:hover,
+.map-filter-button:hover {
+  background: #f2f6f2;
+}
+
+.map-toolbar-button:disabled {
+  color: #9aa39c;
+  cursor: not-allowed;
+}
+
+.map-filter-button:not(.active) {
+  color: #87938a;
+  opacity: 0.75;
+}
+
+.map-filter-button i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.map-tool-error {
+  color: #985b4e;
+  font-size: 11px;
+  text-align: right;
 }
 
 .empty-map-message {
@@ -1658,15 +1760,19 @@
 }
 
 .legend-planned {
-  background: #315a49;
+  background: #2563eb;
 }
 
 .legend-wishlist {
   background: #a15e39;
 }
 
+.legend-unassigned {
+  background: #e27a21;
+}
+
 .legend-visited {
-  background: #718b73;
+  background: #2e7d32;
 }
 
 .year-planner-heading {
@@ -2053,9 +2159,64 @@
   margin-bottom: 24px;
 }
 
+.trip-stops-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.trip-stops-editor > div:first-child > strong {
+  color: #3b4e42;
+  font-size: 14px;
+}
+
+.trip-stops-editor > div:first-child > p {
+  margin: 4px 0 0;
+}
+
+.trip-stops-editor > .secondary-button {
+  justify-self: start;
+  min-height: 36px;
+  font-size: 12px;
+}
+
+.trip-stop-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trip-stop-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #e8ece8;
+  border-radius: 6px;
+  color: #59685d;
+  font-size: 9px;
+}
+
+.trip-stop-list li span {
+  display: grid;
+  gap: 3px;
+}
+
+.trip-stop-list li small {
+  color: #929d95;
+  font-size: 11px;
+}
+
+.trip-stop-list .text-button {
+  font-size: 12px;
+}
+
 .trip-form-note {
   color: #929d95;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 400;
   line-height: 1.45;
 }
@@ -2136,7 +2297,7 @@
 .shared-place-search .place-search-note,
 .place-selected-detail {
   color: #9aa39c;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 400;
 }
 
@@ -2207,6 +2368,13 @@
   border: 1px solid #e7ece6;
   border-radius: 8px;
   background: #fff;
+  scroll-margin-top: 88px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.wishlist-card-highlighted {
+  border-color: #6b9478;
+  box-shadow: 0 0 0 3px rgb(107 148 120 / 22%);
 }
 
 .priority-label {
@@ -2484,6 +2652,10 @@
   flex: 1;
 }
 
+.preview-experience-list .trip-linked-item-actions {
+  flex: 0 0 auto;
+}
+
 .preview-experience-list h3 {
   margin: 0 0 3px;
   color: #40564a;
@@ -2508,22 +2680,6 @@
   font-size: 9px;
 }
 
-.trip-preview-calendar-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.trip-preview-calendar-link h2 {
-  margin: 0;
-  color: #364d3e;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 21px;
-  font-weight: 500;
-}
-
-.trip-preview-calendar-link p:last-child,
 .trip-preview-note {
   margin: 7px 0 0;
   color: #7d8981;
@@ -2562,6 +2718,12 @@
   display: grid;
   gap: 4px;
   min-width: 0;
+  color: #7d8a80;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.schedule-item-fields .duration-input legend {
   color: #7d8a80;
   font-size: 8px;
   font-weight: 650;
@@ -2675,8 +2837,7 @@
   .lifetime-map-panel,
   .wishlist-map-panel,
   .trip-create-form,
-  .trip-preview-experiences,
-  .trip-preview-calendar-link {
+  .trip-preview-experiences {
     padding: 13px;
   }
 
@@ -2684,7 +2845,10 @@
     grid-template-columns: 1fr;
   }
 
-  .lifetime-map-panel .trip-map,
+  .lifetime-map-panel .trip-map {
+    height: 340px;
+  }
+
   .wishlist-map-panel .trip-map {
     height: 280px;
   }
@@ -2776,10 +2940,6 @@
     margin-top: 0;
   }
 
-  .trip-preview-calendar-link {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 .trip-view-switcher {
@@ -3017,6 +3177,17 @@
   border-color: #d0d9e8;
   background: #edf1f8;
   color: #526882;
+}
+
+.trip-overview-calendar .fc .fc-timegrid-event.calendar-type-transit {
+  border: 1px dashed #c79a54;
+  background: #fff6e6;
+  color: #80602d;
+  cursor: default;
+}
+
+.trip-overview-calendar .fc .fc-timegrid-event.calendar-type-transit:active {
+  cursor: default;
 }
 
 .trip-overview-calendar .fc .fc-timegrid-event.calendar-type-stay {

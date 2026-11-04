@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import PlaceSearchInput from './PlaceSearchInput.jsx'
+import TripStopsEditor from './TripStopsEditor.jsx'
 
 const currentYear = new Date().getFullYear()
 
@@ -29,47 +29,43 @@ function formatTripDateRange(startDateISO, tripDays) {
 
 function TripDetailsForm({ trip, minTripDays = 1, onSave, onCancel }) {
   const [name, setName] = useState(trip.name)
-  const [location, setLocation] = useState(trip.location ?? '')
-  const [locationDetails, setLocationDetails] = useState(trip.locationDetails ?? '')
-  const [coordinates, setCoordinates] = useState(trip.coordinates ?? null)
-  const [year, setYear] = useState(trip.year)
-  const [dates, setDates] = useState(trip.dates ?? '')
+  const [stops, setStops] = useState(() => {
+    if (Array.isArray(trip.stops)) return trip.stops
+    if (!trip.location && !trip.coordinates) return []
+    return [{
+      id: `${trip.id}-legacy-stop`,
+      name: trip.location || 'Trip destination',
+      details: trip.locationDetails ?? '',
+      coordinates: trip.coordinates ?? null,
+    }]
+  })
+  const [year, setYear] = useState(String(trip.year))
   const [startDateISO, setStartDateISO] = useState(trip.startDateISO ?? '')
-  const [tripDays, setTripDays] = useState(trip.tripDays ?? trip.days ?? 1)
-  const [vacationDays, setVacationDays] = useState(trip.vacationDays ?? 0)
-  const [estimatedCost, setEstimatedCost] = useState(trip.estimatedCost ?? 0)
+  const [tripDays, setTripDays] = useState(String(trip.tripDays ?? trip.days ?? 1))
+  const [vacationDays, setVacationDays] = useState(String(trip.vacationDays ?? 0))
+  const [estimatedCost, setEstimatedCost] = useState(String(trip.estimatedCost ?? 0))
   const [formError, setFormError] = useState('')
 
   function changeYear(nextYear) {
     setYear(nextYear)
-    if (!startDateISO) return
+    if (!startDateISO || nextYear.length !== 4) return
+    const numericYear = Number(nextYear)
+    if (!Number.isInteger(numericYear) || numericYear < 1900) return
     const date = new Date(`${startDateISO}T12:00:00`)
-    date.setFullYear(nextYear)
+    date.setFullYear(numericYear)
     const nextStartDate = getISODate(date)
     setStartDateISO(nextStartDate)
-    setDates(formatTripDateRange(nextStartDate, tripDays))
   }
 
   function changeStartDate(nextStartDate) {
     setStartDateISO(nextStartDate)
     if (!nextStartDate) return
     const nextYear = Number(nextStartDate.slice(0, 4))
-    setYear(nextYear)
-    setDates(formatTripDateRange(nextStartDate, tripDays))
+    setYear(String(nextYear))
   }
 
   function changeTripDays(value) {
-    const nextTripDays = Number(value)
-    setTripDays(nextTripDays)
-    if (startDateISO && nextTripDays >= minTripDays) {
-      setDates(formatTripDateRange(startDateISO, nextTripDays))
-    }
-  }
-
-  function handleLocationChange(value) {
-    setLocation(value)
-    setLocationDetails('')
-    setCoordinates(null)
+    setTripDays(value)
   }
 
   function handleSubmit(event) {
@@ -79,18 +75,22 @@ function TripDetailsForm({ trip, minTripDays = 1, onSave, onCancel }) {
       return
     }
     setFormError('')
+    const placeNames = stops.map((stop) => stop.name.trim()).filter(Boolean)
     onSave({
       ...trip,
       name: name.trim(),
-      location: location.trim(),
-      locationDetails,
-      coordinates,
-      year,
-      dates: dates.trim(),
+      location: placeNames.join(', '),
+      locationDetails: stops.map((stop) => stop.details).filter(Boolean).join(' · '),
+      coordinates: stops[0]?.coordinates ?? null,
+      stops,
+      year: Number(year),
+      dates: startDateISO
+        ? formatTripDateRange(startDateISO, Number(tripDays))
+        : trip.dates ?? '',
       startDateISO: startDateISO || null,
-      tripDays,
-      vacationDays,
-      estimatedCost,
+      tripDays: Number(tripDays),
+      vacationDays: Number(vacationDays),
+      estimatedCost: Number(estimatedCost),
     })
   }
 
@@ -108,27 +108,9 @@ function TripDetailsForm({ trip, minTripDays = 1, onSave, onCancel }) {
           <span>Trip name</span>
           <input required value={name} onChange={(event) => setName(event.target.value)} />
         </label>
-        <div className="form-field">
-          <span>Destination</span>
-          <PlaceSearchInput
-            ariaLabel="Destination"
-            value={location}
-            onChange={handleLocationChange}
-            onSelect={(place) => {
-              setLocation(place.name)
-              setLocationDetails(place.details)
-              setCoordinates(place.coordinates)
-            }}
-            details={locationDetails}
-          />
-        </div>
         <label className="form-field">
           <span>Planning year</span>
-          <input required type="number" min={currentYear} max={currentYear + 59} value={year} onChange={(event) => changeYear(Number(event.target.value))} />
-        </label>
-        <label className="form-field">
-          <span>Dates or season</span>
-          <input value={dates} onChange={(event) => setDates(event.target.value)} placeholder="e.g. Spring · flexible" />
+          <input required type="number" min="1900" max={currentYear + 59} value={year} onChange={(event) => changeYear(event.target.value)} />
         </label>
         <label className="form-field">
           <span>Exact start date (optional)</span>
@@ -142,13 +124,14 @@ function TripDetailsForm({ trip, minTripDays = 1, onSave, onCancel }) {
         </label>
         <label className="form-field">
           <span>Vacation days (PTO)</span>
-          <input required type="number" min="0" value={vacationDays} onChange={(event) => setVacationDays(Number(event.target.value))} />
+          <input required type="number" min="0" value={vacationDays} onChange={(event) => setVacationDays(event.target.value)} />
         </label>
         <label className="form-field">
           <span>Estimated trip cost ($)</span>
-          <input required type="number" min="0" step="100" value={estimatedCost} onChange={(event) => setEstimatedCost(Number(event.target.value))} />
+          <input required type="number" min="0" step="100" value={estimatedCost} onChange={(event) => setEstimatedCost(event.target.value)} />
         </label>
       </div>
+      <TripStopsEditor stops={stops} onChange={setStops} />
       {formError && <p className="place-search-feedback search-error" role="alert">{formError}</p>}
       <div className="trip-form-actions">
         <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>

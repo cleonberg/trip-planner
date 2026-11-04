@@ -1,8 +1,13 @@
-import { useEffect, useMemo } from 'react'
-import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { useEffect, useMemo, useState } from 'react'
+import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
 const DEFAULT_CENTER = [37.745, -119.593]
+const MAP_FILTERS = [
+  { id: 'planned', label: 'Planned', color: '#2563eb' },
+  { id: 'visited', label: 'Visited', color: '#2e7d32' },
+  { id: 'wishlist', label: 'Unassigned wish list', color: '#e27a21' },
+]
 
 function MapViewport({ points, selectedLocation, initialCenter }) {
   const map = useMap()
@@ -38,22 +43,133 @@ function MapClickHandler({ onLocationSelect }) {
   return null
 }
 
-function TripMap({ activities, routeCoordinates = [], routeSegments = [], selectedLocation, initialCenter, onLocationSelect }) {
+function MapScrollWheelZoom({ enabled }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (enabled) {
+      map.scrollWheelZoom.enable()
+    } else {
+      map.scrollWheelZoom.disable()
+    }
+
+    return () => map.scrollWheelZoom.disable()
+  }, [enabled, map])
+
+  return null
+}
+
+function MapToolbar({ points, mapLayer, onToggleLayer, mapFilters, onMapFilterChange }) {
+  const map = useMap()
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [toolError, setToolError] = useState('')
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement === map.getContainer())
+      window.requestAnimationFrame(() => map.invalidateSize())
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [map])
+
+  function fitAllPlaces() {
+    if (points.length > 1) {
+      map.fitBounds(points, { padding: [40, 40] })
+    } else if (points.length === 1) {
+      map.setView(points[0], 12)
+    }
+  }
+
+  async function toggleFullscreen() {
+    const container = map.getContainer()
+    setToolError('')
+    try {
+      if (document.fullscreenElement === container) {
+        await document.exitFullscreen()
+      } else if (container.requestFullscreen) {
+        await container.requestFullscreen()
+      } else {
+        throw new Error('Fullscreen is not supported by this browser.')
+      }
+    } catch (error) {
+      console.error('Unable to toggle map fullscreen.', error)
+      setToolError(error instanceof Error ? error.message : 'Fullscreen could not be changed.')
+    }
+  }
+
+  return (
+    <div className="map-toolbar" role="group" aria-label="Map controls">
+      <div className="map-toolbar-actions">
+        <button className="map-toolbar-button" type="button" onClick={fitAllPlaces} disabled={points.length === 0}>
+          Fit all places
+        </button>
+        <button className="map-toolbar-button" type="button" onClick={onToggleLayer}>
+          {mapLayer === 'street' ? 'Satellite' : 'Street map'}
+        </button>
+        <button className="map-toolbar-button" type="button" onClick={toggleFullscreen}>
+          {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        </button>
+      </div>
+      <div className="map-toolbar-filters" role="group" aria-label="Show map markers">
+        {MAP_FILTERS.map((filter) => (
+          <button
+            className={`map-filter-button${mapFilters[filter.id] ? ' active' : ''}`}
+            type="button"
+            key={filter.id}
+            aria-pressed={mapFilters[filter.id]}
+            onClick={() => onMapFilterChange(filter.id)}
+          >
+            <i style={{ backgroundColor: filter.color }} />
+            {filter.label}
+          </button>
+        ))}
+      </div>
+      {toolError && <span className="map-tool-error" role="alert">{toolError}</span>}
+    </div>
+  )
+}
+
+function TripMap({
+  activities,
+  routeCoordinates = [],
+  routeSegments = [],
+  selectedLocation,
+  initialCenter,
+  onLocationSelect,
+  onTripMarkerClick,
+  showToolbar = false,
+  scrollWheelZoom = false,
+  fitActivities,
+  mapFilters = {},
+  onMapFilterChange,
+}) {
+  const [mapLayer, setMapLayer] = useState('street')
   const points = useMemo(
-    () => activities
+    () => (fitActivities ?? activities)
       .filter((activity) => activity.coordinates)
       .map((activity) => [activity.coordinates.lat, activity.coordinates.lng]),
-    [activities],
+    [activities, fitActivities],
   )
   const routePositions = useMemo(
     () => routeCoordinates.map(([longitude, latitude]) => [latitude, longitude]),
     [routeCoordinates],
   )
   const markerColors = {
-    planned: '#315a49',
+    planned: '#2563eb',
     wishlist: '#a15e39',
-    visited: '#718b73',
+    visited: '#2e7d32',
   }
+  const tileLayer = mapLayer === 'satellite'
+    ? {
+        attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      }
+    : {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      }
 
   return (
     <MapContainer
@@ -64,14 +180,21 @@ function TripMap({ activities, routeCoordinates = [], routeSegments = [], select
           ? [initialCenter.lat, initialCenter.lng]
           : DEFAULT_CENTER)}
       zoom={12}
-      scrollWheelZoom={false}
+      scrollWheelZoom={scrollWheelZoom}
     >
       <MapViewport initialCenter={initialCenter} points={points} selectedLocation={selectedLocation} />
+      <MapScrollWheelZoom enabled={scrollWheelZoom} />
       {onLocationSelect && <MapClickHandler onLocationSelect={onLocationSelect} />}
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <TileLayer attribution={tileLayer.attribution} url={tileLayer.url} />
+      {showToolbar && (
+        <MapToolbar
+          points={points}
+          mapLayer={mapLayer}
+          onToggleLayer={() => setMapLayer((currentLayer) => currentLayer === 'street' ? 'satellite' : 'street')}
+          mapFilters={mapFilters}
+          onMapFilterChange={onMapFilterChange}
+        />
+      )}
       {routePositions.length > 1 && (
         <Polyline positions={routePositions} pathOptions={{ color: '#427353', weight: 5, opacity: 0.8 }} />
       )}
@@ -89,14 +212,17 @@ function TripMap({ activities, routeCoordinates = [], routeSegments = [], select
           center={[activity.coordinates.lat, activity.coordinates.lng]}
           key={activity.id ?? `${activity.time}-${activity.title}-${index}`}
           pathOptions={{ color: '#fff', fillColor: activity.mapColor ?? markerColors[activity.mapStatus] ?? '#315a49', fillOpacity: 1, weight: 3 }}
-          radius={9}
+          radius={activity.mapRadius ?? 9}
+          eventHandlers={activity.tripId && onTripMarkerClick
+            ? { click: () => onTripMarkerClick(activity.tripId) }
+            : undefined}
         >
-          <Popup>
+          <Tooltip>
             <strong>{activity.title}</strong><br />
             {activity.time}<br />
             {activity.place}
             {activity.locationDetails && <><br />{activity.locationDetails}</>}
-          </Popup>
+          </Tooltip>
         </CircleMarker>
       ))}
       {selectedLocation && (
@@ -105,7 +231,7 @@ function TripMap({ activities, routeCoordinates = [], routeSegments = [], select
           pathOptions={{ color: '#fff', fillColor: '#a15e39', fillOpacity: 1, weight: 3 }}
           radius={9}
         >
-          <Popup>Selected location</Popup>
+          <Tooltip>Selected location</Tooltip>
         </CircleMarker>
       )}
     </MapContainer>

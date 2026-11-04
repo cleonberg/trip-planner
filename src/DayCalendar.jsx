@@ -2,7 +2,7 @@ import FullCalendar from '@fullcalendar/react'
 import interactionPlugin from '@fullcalendar/interaction'
 import timeGridPlugin from '@fullcalendar/timegrid'
 
-function DayCalendar({ dayId, date, events, onTimeSelect, onEventDrop, onEventResize, onEventClick }) {
+function DayCalendar({ dayId, date, events, eventAllow, onTimeSelect, onEventDrop, onEventResize, onEventClick }) {
   return (
     <FullCalendar
       key={dayId}
@@ -25,7 +25,7 @@ function DayCalendar({ dayId, date, events, onTimeSelect, onEventDrop, onEventRe
       eventStartEditable
       eventDurationEditable
       eventResizableFromStart
-      eventConstraint={{ start: '06:00', end: '23:00' }}
+      eventAllow={eventAllow}
       eventLongPressDelay={300}
       selectLongPressDelay={300}
       events={events}

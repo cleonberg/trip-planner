@@ -4,6 +4,48 @@
   gap: 14px;
 }
 
+.trip-preview-hero-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.trip-wishlist-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trip-wishlist-toggle.has-items {
+  border-color: #b8d2bf;
+  background: #edf5ef;
+  color: #315a49;
+}
+
+.trip-wishlist-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8ece8;
+  color: #66736b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.trip-wishlist-toggle.has-items .trip-wishlist-count {
+  background: #315a49;
+  color: #fff;
+}
+
+.trip-wishlist-panel[hidden] {
+  display: none;
+}
+
 .trip-idea-picker {
   display: grid;
   gap: 10px;
@@ -37,6 +79,13 @@
   font-size: 13px;
 }
 
+.trip-linked-item-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+}
+
 @media (max-width: 600px) {
   .trip-ideas-heading-actions {
     align-items: flex-end;
@@ -44,8 +93,17 @@
     gap: 8px;
   }
 
+  .trip-preview-hero-actions {
+    flex-wrap: wrap;
+  }
+
   .trip-idea-option {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .trip-linked-item-actions {
+    align-items: flex-start;
     flex-direction: column;
   }
 }
@@ -58,6 +116,23 @@
   font-weight: 600;
 }
 
+.trip-travel-note,
+.trip-travel-status,
+.trip-travel-error {
+  margin: 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trip-travel-note,
+.trip-travel-status {
+  color: #66736b;
+}
+
+.trip-travel-error {
+  color: #985b4e;
+}
+
 .trip-route-day-select select {
   min-width: 120px;
   border: 1px solid #dfe5df;
@@ -66,6 +141,37 @@
   color: #203d34;
   padding: 9px 11px;
   font: inherit;
+}
+
+.trip-map-browser .section-heading {
+  align-items: flex-end;
+}
+
+.trip-map-summary {
+  margin: 6px 0 0;
+  color: #66736b;
+  font-size: 12px;
+}
+
+.trip-overview-map-view,
+.trip-overview-map-view .trip-map {
+  height: 380px;
+  border-radius: 10px;
+}
+
+.trip-overview-map-view {
+  overflow: hidden;
+}
+
+.trip-map-browser .empty-map-message {
+  min-height: 180px;
+}
+
+.trip-map-browser .trip-route-section-embedded {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .trip-route-section {
@@ -195,6 +301,11 @@
   .trip-route-map,
   .trip-route-map .trip-map {
     min-height: 280px;
+    height: 280px;
+  }
+
+  .trip-overview-map-view,
+  .trip-overview-map-view .trip-map {
     height: 280px;
   }
 

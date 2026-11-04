@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import TripMap from './TripMap.jsx'
+import { getDrivingRoute } from './routing.js'
 
 const routeCache = new Map()
 
@@ -120,7 +121,7 @@ function getRouteKey(edges) {
   ]))
 }
 
-function TripRouteMap({ items, dayLabel }) {
+function TripRouteMap({ items, dayLabel, embedded = false, scrollWheelZoom = false }) {
   const [routeResult, setRouteResult] = useState(null)
   const [retryCount, setRetryCount] = useState(0)
   const plan = useMemo(() => buildRoutePlan(items), [items])
@@ -162,26 +163,17 @@ function TripRouteMap({ items, dayLabel }) {
         })
 
         await Promise.all(plan.drivingRuns.map(async (run) => {
-          const coordinates = run.nodes.map((node) => (
-            `${node.coordinates.lng},${node.coordinates.lat}`
-          )).join(';')
-          const response = await fetch(
-            `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`,
-            { signal: controller.signal },
+          const route = await getDrivingRoute(
+            run.nodes.map((node) => node.coordinates),
+            controller.signal,
           )
-          if (!response.ok) {
-            throw new Error(`Routing service returned ${response.status}`)
-          }
-
-          const data = await response.json()
-          const route = data.routes?.[0]
-          if (data.code !== 'Ok' || !route || route.legs.length !== run.edgeIndexes.length) {
+          if (route.legs.length !== run.edgeIndexes.length) {
             throw new Error('Routing service could not find a complete driving route')
           }
 
           segments.push({
             type: 'driving',
-            coordinates: route.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude]),
+            coordinates: route.coordinates,
           })
           run.edgeIndexes.forEach((edgeIndex, index) => {
             legs[edgeIndex] = { ...plan.edges[edgeIndex], ...route.legs[index], type: 'driving' }
@@ -209,14 +201,16 @@ function TripRouteMap({ items, dayLabel }) {
   }, [currentResult?.route, hasDrivingRoutes, plan, retryCount, routeKey])
 
   return (
-    <section className="trip-route-section" aria-label="Map and directions">
-      <div className="trip-route-heading">
-        <div><p className="eyebrow">{dayLabel}</p><h3>Map &amp; directions</h3></div>
-        <span>Driving routes · straight-line flights</span>
-      </div>
+    <section className={`trip-route-section${embedded ? ' trip-route-section-embedded' : ''}`} aria-label="Map and directions">
+      {!embedded && (
+        <div className="trip-route-heading">
+          <div><p className="eyebrow">{dayLabel}</p><h3>Map &amp; directions</h3></div>
+          <span>Driving routes · straight-line flights</span>
+        </div>
+      )}
       <div className="trip-route-layout">
         <div className="trip-route-map">
-          <TripMap activities={plan.mapActivities} routeSegments={routeSegments} />
+          <TripMap activities={plan.mapActivities} routeSegments={routeSegments} scrollWheelZoom={scrollWheelZoom} />
         </div>
         <div className="trip-route-details" aria-live="polite">
           {isLoading && <p>Calculating driving directions…</p>}

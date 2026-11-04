@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import TripMap from './TripMap.jsx'
-import PlaceSearchInput from './PlaceSearchInput.jsx'
+import TripStopsEditor from './TripStopsEditor.jsx'
 
 const firstPlanningYear = new Date().getFullYear()
 const planningYears = Array.from({ length: 120 }, (_, index) => firstPlanningYear - 60 + index)
@@ -31,6 +31,36 @@ function LimitMeter({ label, actual, limit, format }) {
       </div>
       {overLimit && <small className="limit-warning">Over this year's plan by {format(actual - limit)}</small>}
     </div>
+  )
+}
+
+function AnnualPlanNumberField({ year, field, value, ariaLabel, prefix, suffix, onUpdatePlan }) {
+  const [draft, setDraft] = useState(String(value))
+
+  function commitValue() {
+    const nextValue = draft.trim() ? Number(draft) : 0
+    if (Number.isFinite(nextValue)) {
+      onUpdatePlan(year, field, nextValue)
+      setDraft(String(nextValue))
+    } else {
+      setDraft(String(value))
+    }
+  }
+
+  return (
+    <span className="annual-input-wrap">
+      {prefix}
+      <input
+        type="number"
+        min="0"
+        step={field === 'travelBudget' ? 100 : 1}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitValue}
+        aria-label={ariaLabel}
+      />
+      {suffix}
+    </span>
   )
 }
 
@@ -71,33 +101,27 @@ function TripCard({ trip, onOpen, onYearChange, onDragStart }) {
 
 function TripForm({ onAddTrip, onCancel }) {
   const [name, setName] = useState('')
-  const [location, setLocation] = useState('')
-  const [details, setDetails] = useState('')
-  const [coordinates, setCoordinates] = useState(null)
-  const [year, setYear] = useState(firstPlanningYear + 1)
+  const [stops, setStops] = useState([])
+  const [year, setYear] = useState(String(firstPlanningYear + 1))
   const [status, setStatus] = useState('Idea')
-  const [days, setDays] = useState(5)
-  const [vacationDays, setVacationDays] = useState(5)
-  const [estimatedCost, setEstimatedCost] = useState(2500)
-
-  function handlePlaceChange(nextLocation) {
-    setLocation(nextLocation)
-    setDetails('')
-    setCoordinates(null)
-  }
+  const [days, setDays] = useState('5')
+  const [vacationDays, setVacationDays] = useState('5')
+  const [estimatedCost, setEstimatedCost] = useState('2500')
 
   function handleSubmit(event) {
     event.preventDefault()
+    const placeNames = stops.map((stop) => stop.name.trim()).filter(Boolean)
     onAddTrip({
       id: `trip-${Date.now()}`,
       name: name.trim(),
-      location: location.trim(),
-      locationDetails: details,
-      coordinates,
-      year,
-      tripDays: days,
-      vacationDays,
-      estimatedCost,
+      location: placeNames.join(', '),
+      locationDetails: stops.map((stop) => stop.details).filter(Boolean).join(' · '),
+      coordinates: stops[0]?.coordinates ?? null,
+      stops,
+      year: Number(year),
+      tripDays: Number(days),
+      vacationDays: Number(vacationDays),
+      estimatedCost: Number(estimatedCost),
       status,
       dates: '',
     })
@@ -117,22 +141,9 @@ function TripForm({ onAddTrip, onCancel }) {
           <span>Trip name</span>
           <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Japan spring trip" />
         </label>
-        <div className="form-field">
-          <span>Destination</span>
-          <PlaceSearchInput
-            value={location}
-            onChange={handlePlaceChange}
-            onSelect={(place) => {
-              setLocation(place.name)
-              setDetails(place.details)
-              setCoordinates(place.coordinates)
-            }}
-            details={details}
-          />
-        </div>
         <label className="form-field">
           <span>Trip year</span>
-          <input required type="number" min="1900" max={firstPlanningYear + 59} value={year} onChange={(event) => setYear(Number(event.target.value))} />
+          <input required type="number" min="1900" max={firstPlanningYear + 59} value={year} onChange={(event) => setYear(event.target.value)} />
         </label>
         <label className="form-field">
           <span>Status</span>
@@ -144,17 +155,18 @@ function TripForm({ onAddTrip, onCancel }) {
         </label>
         <label className="form-field">
           <span>Trip length (days)</span>
-          <input required type="number" min="1" value={days} onChange={(event) => setDays(Number(event.target.value))} />
+          <input required type="number" min="1" value={days} onChange={(event) => setDays(event.target.value)} />
         </label>
         <label className="form-field">
           <span>Vacation days (PTO)</span>
-          <input required type="number" min="0" value={vacationDays} onChange={(event) => setVacationDays(Number(event.target.value))} />
+          <input required type="number" min="0" value={vacationDays} onChange={(event) => setVacationDays(event.target.value)} />
         </label>
         <label className="form-field">
           <span>Estimated trip cost ($)</span>
-          <input required type="number" min="0" value={estimatedCost} onChange={(event) => setEstimatedCost(Number(event.target.value))} />
+          <input required type="number" min="0" value={estimatedCost} onChange={(event) => setEstimatedCost(event.target.value)} />
         </label>
       </div>
+      <TripStopsEditor stops={stops} onChange={setStops} />
       <div className="trip-form-actions">
         <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
         <button className="primary-button" type="submit" disabled={!name.trim()}>Add trip</button>
@@ -173,29 +185,57 @@ function LifetimeOverview({
   onAddTrip,
 }) {
   const [isAddingTrip, setIsAddingTrip] = useState(false)
+  const [mapFilters, setMapFilters] = useState({ planned: true, visited: true, wishlist: true })
   const years = useMemo(() => [...new Set([
     ...annualPlans.map((plan) => plan.year),
     ...trips.map((trip) => trip.year),
   ])].sort((a, b) => a - b), [annualPlans, trips])
   const markers = useMemo(() => [
-    ...trips.filter((trip) => trip.coordinates).map((trip) => ({
-      id: `trip-${trip.id}`,
-      title: trip.name,
-      place: trip.location,
-      time: `${trip.year} · ${trip.status}`,
-      mapStatus: trip.status?.toLowerCase() === 'visited' ? 'visited' : 'planned',
-      coordinates: trip.coordinates,
-    })),
-    ...wishlist.filter((item) => item.coordinates).map((item) => ({
+    ...trips.flatMap((trip) => {
+      const tripStatus = trip.status?.toLowerCase() === 'visited' ? 'visited' : 'planned'
+      const stops = Array.isArray(trip.stops) ? trip.stops : []
+      if (stops.length) {
+        return stops
+          .filter((stop) => stop.coordinates)
+          .map((stop, index) => ({
+            id: `trip-${trip.id}-stop-${stop.id ?? index}`,
+            tripId: trip.id,
+            title: stop.name,
+            place: stop.name,
+            time: `${trip.name} · ${trip.year} · ${trip.status}`,
+            mapStatus: tripStatus,
+            mapCategory: tripStatus,
+            mapRadius: 7,
+            locationDetails: stop.details,
+            coordinates: stop.coordinates,
+          }))
+      }
+
+      return trip.coordinates ? [{
+        id: `trip-${trip.id}`,
+        tripId: trip.id,
+        title: trip.name,
+        place: trip.location,
+        time: `${trip.year} · ${trip.status}`,
+        mapStatus: tripStatus,
+        mapCategory: tripStatus,
+        coordinates: trip.coordinates,
+      }] : []
+    }),
+    ...wishlist.filter((item) => !item.tripId && item.coordinates).map((item) => ({
       id: `wish-${item.id}`,
       title: item.name ?? item.title,
       place: item.location,
       time: item.status,
       mapStatus: item.status.toLowerCase(),
+      mapCategory: 'wishlist',
+      mapColor: '#e27a21',
+      mapRadius: 12,
       locationDetails: item.details ?? item.locationDetails,
       coordinates: item.coordinates,
     })),
   ], [trips, wishlist])
+  const visibleMarkers = markers.filter((marker) => mapFilters[marker.mapCategory])
   const totalPto = trips.reduce((sum, trip) => sum + trip.vacationDays, 0)
   const totalCost = trips.reduce((sum, trip) => sum + trip.estimatedCost, 0)
   const locationCount = markers.length
@@ -211,6 +251,11 @@ function LifetimeOverview({
     if (tripId) onTripYearChange(tripId, year)
   }
 
+  function handleTripMarkerClick(tripId) {
+    const trip = trips.find((currentTrip) => currentTrip.id === tripId)
+    if (trip) onOpenTrip(trip)
+  }
+
   return (
     <main className="lifetime-page">
       <section className="lifetime-hero">
@@ -220,7 +265,7 @@ function LifetimeOverview({
           <p>Record the places you’ve been and plan the adventures still ahead, all in one lifetime view.</p>
         </div>
         <button className="primary-button" type="button" onClick={() => setIsAddingTrip((open) => !open)}>
-          {isAddingTrip ? 'Close form' : '+ Plan a trip'}
+          {isAddingTrip ? 'Close form' : '+ Add a trip'}
         </button>
       </section>
 
@@ -250,11 +295,22 @@ function LifetimeOverview({
           <p>{locationCount} mapped {locationCount === 1 ? 'place' : 'places'}</p>
         </div>
         {markers.length > 0
-          ? <TripMap activities={markers} />
-          : <p className="empty-map-message">Add a destination or wish-list place to start mapping your travel plans.</p>}
+          ? <TripMap
+            activities={visibleMarkers}
+            fitActivities={markers}
+            onTripMarkerClick={handleTripMarkerClick}
+            showToolbar
+            scrollWheelZoom
+            mapFilters={mapFilters}
+            onMapFilterChange={(category) => setMapFilters((currentFilters) => ({
+              ...currentFilters,
+              [category]: !currentFilters[category],
+            }))}
+          />
+          : <p className="empty-map-message">Add a key place or unassigned wish-list place to start mapping your travel plans.</p>}
         <div className="map-legend" aria-label="Map legend">
           <span><i className="legend-dot legend-planned" /> Planned trip</span>
-          <span><i className="legend-dot legend-wishlist" /> Wish list</span>
+          <span><i className="legend-dot legend-unassigned" /> Unassigned wish list</span>
           <span><i className="legend-dot legend-visited" /> Visited</span>
         </div>
       </section>
@@ -288,11 +344,27 @@ function LifetimeOverview({
                   <div className="annual-limits">
                     <label>
                       <span>Travel budget</span>
-                      <span className="annual-input-wrap">$<input type="number" min="0" step="100" value={plan.travelBudget} onChange={(event) => onUpdatePlan(year, 'travelBudget', Number(event.target.value))} aria-label={`${year} travel budget`} /></span>
+                      <AnnualPlanNumberField
+                        key={`${year}-travelBudget-${plan.travelBudget}`}
+                        year={year}
+                        field="travelBudget"
+                        value={plan.travelBudget}
+                        ariaLabel={`${year} travel budget`}
+                        prefix="$"
+                        onUpdatePlan={onUpdatePlan}
+                      />
                     </label>
                     <label>
                       <span>Vacation days</span>
-                      <span className="annual-input-wrap"><input type="number" min="0" step="1" value={plan.vacationDays} onChange={(event) => onUpdatePlan(year, 'vacationDays', Number(event.target.value))} aria-label={`${year} vacation days`} /> <small>days</small></span>
+                      <AnnualPlanNumberField
+                        key={`${year}-vacationDays-${plan.vacationDays}`}
+                        year={year}
+                        field="vacationDays"
+                        value={plan.vacationDays}
+                        ariaLabel={`${year} vacation days`}
+                        suffix={<small>days</small>}
+                        onUpdatePlan={onUpdatePlan}
+                      />
                     </label>
                   </div>
                   <LimitMeter label="Trip costs" actual={plannedCost} limit={plan.travelBudget} format={currency.format} />

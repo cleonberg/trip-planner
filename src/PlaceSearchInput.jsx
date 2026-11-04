@@ -55,7 +55,19 @@ function PlaceSearchInput({ value, onChange, onSelect, details = '', placeholder
   return (
     <div className="shared-place-search">
       <div className="shared-place-search-row">
-        <input aria-label={ariaLabel} value={value} onChange={(event) => updateQuery(event.target.value)} placeholder={placeholder} required={required} />
+        <input
+          aria-label={ariaLabel}
+          value={value}
+          onChange={(event) => updateQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              search()
+            }
+          }}
+          placeholder={placeholder}
+          required={required}
+        />
         <button type="button" className="place-search-button" onClick={search} disabled={!value.trim() || isSearching}>
           {isSearching ? 'Searching…' : 'Search'}
         </button>
