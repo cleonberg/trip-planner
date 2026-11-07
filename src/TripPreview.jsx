@@ -117,6 +117,10 @@ function TripPreview({
     [trip.id, wishlist],
   )
   const tripActivities = useMemo(() => trip.activities ?? [], [trip.activities])
+  const tripLocations = Array.isArray(trip.stops)
+    ? trip.stops.map((stop) => stop.name?.trim()).filter(Boolean)
+    : []
+  const displayedTripLocations = tripLocations.length ? tripLocations : [trip.location].filter(Boolean)
   const assignedItemsCost = useMemo(
     () => [
       ...tripExperiences.map((item) => item.estimatedCost),
@@ -791,7 +795,9 @@ function TripPreview({
               : 'This trip is locked by the owner and is currently view-only.'}
           </p>
         )}
-        <p>{trip.location}{trip.locationDetails ? ` · ${trip.locationDetails}` : ''}</p>
+        <ul className="trip-preview-locations">
+          {displayedTripLocations.map((location, index) => <li key={`${location}-${index}`}>{location}</li>)}
+        </ul>
         <div className="trip-preview-stats">
           <article><span>When</span><strong>{trip.dates || 'Dates not set'}</strong></article>
           <article><span>Trip length</span><strong>{trip.tripDays ?? trip.days} days</strong></article>

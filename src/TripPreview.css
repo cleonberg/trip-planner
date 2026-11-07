@@ -86,6 +86,14 @@
   gap: 9px;
 }
 
+@media (max-width: 760px) {
+  .trip-preview-hero-actions {
+    width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 600px) {
   .trip-ideas-heading-actions {
     align-items: flex-end;

@@ -1,4 +1,4 @@
-function SharedTripsView({ trips, isLoading, error, onOpen, onManageFamily }) {
+function SharedTripsView({ trips, isLoading, error, onOpen, onManagePeople }) {
   return (
     <div className="page-wrap shared-trips-page">
       <section className="section-heading">
@@ -28,8 +28,8 @@ function SharedTripsView({ trips, isLoading, error, onOpen, onManageFamily }) {
           </div>
           : <div className="shared-trips-empty">
             <p>No trips have been shared with you yet.</p>
-            <button className="secondary-button" type="button" onClick={onManageFamily}>
-              Set up family access
+            <button className="secondary-button" type="button" onClick={onManagePeople}>
+              Manage people access
             </button>
           </div>}
     </div>

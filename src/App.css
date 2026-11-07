@@ -2564,6 +2564,7 @@
 }
 
 .trip-preview-hero {
+  container-type: inline-size;
   padding: 28px;
   border: 1px solid #e7ece6;
   border-radius: 10px;
@@ -2578,10 +2579,25 @@
   flex: 0 0 auto;
 }
 
-.trip-preview-hero > p:last-of-type {
+@container (max-width: 650px) {
+  .trip-preview-hero-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .trip-preview-hero-actions {
+    width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+  }
+}
+
+.trip-preview-locations {
   margin: 9px 0 0;
+  padding-left: 18px;
   color: #7e8a81;
   font-size: 11px;
+  line-height: 1.55;
 }
 
 .trip-preview-stats {
@@ -2988,6 +3004,11 @@
   .trip-preview-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .trip-preview-hero-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 480px) {
@@ -3093,7 +3114,7 @@
 }
 
 .trip-overview-map .trip-map {
-  height: 330px;
+  height: 430px;
   border-radius: 7px;
 }
 
@@ -3332,7 +3353,7 @@
   }
 
   .trip-overview-map .trip-map {
-    height: 260px;
+    height: 340px;
   }
 
   .trip-day-summary-grid {

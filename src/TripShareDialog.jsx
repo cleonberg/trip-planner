@@ -70,7 +70,7 @@ function TripShareDialog({ user, trip, onClose }) {
     setError('')
     try {
       if (familyMembers.some((member) => member.email?.toLowerCase() === email.trim().toLowerCase())) {
-        throw new Error('That email is already in your family list.')
+        throw new Error('That email is already on your people list.')
       }
       const familyMember = await createFamilyMember(user.uid, { name, email })
       setFamilyMembers((currentMembers) => [...currentMembers, familyMember])
@@ -92,7 +92,7 @@ function TripShareDialog({ user, trip, onClose }) {
       }
       await refreshAccess()
     } catch (createError) {
-      console.error('Unable to add family member to trip access.', createError)
+      console.error('Unable to add person to trip access.', createError)
       setError(createError.message)
     } finally {
       setIsAddingFamilyMember(false)
@@ -120,7 +120,7 @@ function TripShareDialog({ user, trip, onClose }) {
       }))
       await loadTripMembers(user.uid, trip.id).then(setMembers)
     } catch (accessError) {
-      console.error('Unable to update family trip access.', accessError)
+      console.error('Unable to update trip access for person.', accessError)
       setError(accessError.message)
     } finally {
       setWorkingId('')
@@ -134,7 +134,7 @@ function TripShareDialog({ user, trip, onClose }) {
       await deleteFamilyMember({ memberId })
       await refreshAccess()
     } catch (removeError) {
-      console.error('Unable to remove family member.', removeError)
+      console.error('Unable to remove person.', removeError)
       setError(removeError.message)
     } finally {
       setWorkingId('')
@@ -180,7 +180,7 @@ function TripShareDialog({ user, trip, onClose }) {
         <button className="close-form dialog-close" type="button" aria-label="Close" onClick={onClose}>×</button>
         <div className="share-dialog-icon">↗</div>
         <h2 id="share-title">Trip access</h2>
-        <p>Add family emails once, then choose who can see or contribute to each trip. Family members sign in with that verified email to see trips they can access.</p>
+        <p>Add people once, then choose who can see or contribute to each trip. They sign in with that verified email to see trips they can access.</p>
         <form className="trip-invite-form" onSubmit={handleAddFamilyMember}>
           <label className="form-field">
             <span>Name</span>
@@ -189,7 +189,7 @@ function TripShareDialog({ user, trip, onClose }) {
               required
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Family member"
+              placeholder="Person's name"
             />
           </label>
           <label className="form-field">
@@ -206,19 +206,19 @@ function TripShareDialog({ user, trip, onClose }) {
           <label className="form-field">
             <span>Access to this trip</span>
             <select value={newMemberRole} onChange={(event) => setNewMemberRole(event.target.value)}>
-              <option value="none">None · save to family list only</option>
+              <option value="none">None · save to people list only</option>
               <option value="viewer">Viewer · can view the trip</option>
               <option value="contributor">Contributor · can edit the trip</option>
             </select>
           </label>
           <button className="primary-button" type="submit" disabled={isAddingFamilyMember}>
-            {isAddingFamilyMember ? 'Adding…' : 'Add family member'}
+            {isAddingFamilyMember ? 'Adding…' : 'Add person'}
           </button>
         </form>
 
         {error && <p className="trip-invite-error" role="alert">{error}</p>}
-        <section className="trip-access-list" aria-label="Family trip access">
-          <h3>Family access to {trip.name}</h3>
+        <section className="trip-access-list" aria-label="People with trip access">
+          <h3>People with access to {trip.name}</h3>
           {isLoadingAccess
             ? <p>Loading access…</p>
             : familyMembers.length > 0
@@ -249,7 +249,7 @@ function TripShareDialog({ user, trip, onClose }) {
                   </button>
                 </div>
               ))
-              : <p>No family members yet. Add their emails above to get started.</p>}
+              : <p>No people saved yet. Add their emails above to get started.</p>}
         </section>
 
         {legacyMembers.length > 0 && (

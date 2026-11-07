@@ -153,9 +153,9 @@ function canContribute(role) {
 
 function getFamilyAccessSyncError(error) {
   if (['functions/not-found', 'functions/internal', 'functions/unavailable'].includes(error.code)) {
-    return 'Family access could not be checked. Verify that the latest Firebase Functions are deployed, then try again.'
+    return 'People access could not be checked. Verify that the latest Firebase Functions are deployed, then try again.'
   }
-  return `Family access could not be checked: ${error.message}`
+  return `People access could not be checked: ${error.message}`
 }
 
 function PlannerApp({ user, initialView = 'lifetime' }) {
@@ -1067,7 +1067,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
             setCurrentView('family')
             setIsMobileMenuOpen(false)
           }}>
-            <span>♧</span> Family access
+            <span>♧</span> People & access
           </button>
           <button className={`nav-item${currentView === 'shared' || currentView === 'shared-trip' ? ' active' : ''}`} type="button" onClick={() => {
             setCurrentView('shared')
@@ -1099,7 +1099,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
                   : currentView === 'wishlist'
                     ? 'Wish list'
                     : currentView === 'family'
-                      ? 'Family access'
+                      ? 'People & access'
                     : currentView === 'shared'
                       ? 'Shared trips'
                       : currentView === 'shared-trip'
@@ -1165,7 +1165,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
             isLoading={isLoadingSharedTrips}
             error={sharedTripsError}
             onOpen={openSharedTrip}
-            onManageFamily={() => {
+            onManagePeople={() => {
               setCurrentView('family')
               setIsMobileMenuOpen(false)
             }}

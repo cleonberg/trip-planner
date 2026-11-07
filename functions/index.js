@@ -268,7 +268,7 @@ exports.revokeTripMember = onCall(async (request) => {
 
 exports.setFamilyTripAccess = onCall(async (request) => {
   const auth = requireOwner(request, request.auth?.uid)
-  const memberId = requireDocumentId(request.data?.memberId, 'family member ID')
+  const memberId = requireDocumentId(request.data?.memberId, 'person ID')
   const requestedTripIds = Array.isArray(request.data?.tripIds)
     ? request.data.tripIds
     : [request.data?.tripId]
@@ -290,7 +290,7 @@ exports.setFamilyTripAccess = onCall(async (request) => {
     Promise.all(tripIds.map((tripId) => db.doc(`users/${auth.uid}/trips/${tripId}`).get())),
   ])
   if (!familyMemberSnapshot.exists) {
-    throw new HttpsError('not-found', 'That family member could not be found.')
+    throw new HttpsError('not-found', 'That person could not be found.')
   }
   if (tripSnapshots.some((tripSnapshot) => !tripSnapshot.exists)) {
     throw new HttpsError('not-found', 'That trip could not be found.')
@@ -299,7 +299,7 @@ exports.setFamilyTripAccess = onCall(async (request) => {
   const familyMember = familyMemberSnapshot.data()
   const email = typeof familyMember.email === 'string' ? familyMember.email.toLowerCase() : ''
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-    throw new HttpsError('failed-precondition', 'The family member email address is invalid.')
+    throw new HttpsError('failed-precondition', 'The saved email address is invalid.')
   }
   const account = role === 'none' ? null : await findVerifiedAccount(email)
   const memberUid = account?.uid ?? familyMember.accountUid
@@ -414,11 +414,11 @@ exports.syncFamilyTripAccess = onCall(async (request) => {
 
 exports.deleteFamilyMember = onCall(async (request) => {
   const auth = requireOwner(request, request.auth?.uid)
-  const memberId = requireDocumentId(request.data?.memberId, 'family member ID')
+  const memberId = requireDocumentId(request.data?.memberId, 'person ID')
   const familyMemberRef = getFamilyMemberRef(auth.uid, memberId)
   const familyMemberSnapshot = await familyMemberRef.get()
   if (!familyMemberSnapshot.exists) {
-    throw new HttpsError('not-found', 'That family member could not be found.')
+    throw new HttpsError('not-found', 'That person could not be found.')
   }
 
   const familyMember = familyMemberSnapshot.data()

@@ -30,7 +30,7 @@ function FamilyAccessView({ user, trips }) {
       })
       .catch((loadError) => {
         if (!active) return
-        console.error('Unable to load family members.', loadError)
+        console.error('Unable to load people.', loadError)
         setError(loadError.message)
       })
       .finally(() => {
@@ -49,7 +49,7 @@ function FamilyAccessView({ user, trips }) {
     setSuccess('')
     try {
       if (familyMembers.some((member) => member.email?.toLowerCase() === email.trim().toLowerCase())) {
-        throw new Error('That email is already in your family list.')
+        throw new Error('That email is already on your people list.')
       }
       const member = await createFamilyMember(user.uid, { name, email })
       setFamilyMembers((currentMembers) => [...currentMembers, member])
@@ -81,7 +81,7 @@ function FamilyAccessView({ user, trips }) {
       ))
       const failures = results.flatMap((result, index) => (
         result.status === 'rejected'
-          ? [`${familyMembers.find((member) => member.id === selectedMemberIds[index])?.name ?? 'Family member'}: ${result.reason.message}`]
+          ? [`${familyMembers.find((member) => member.id === selectedMemberIds[index])?.name ?? 'Person'}: ${result.reason.message}`]
           : []
       ))
 
@@ -130,7 +130,7 @@ function FamilyAccessView({ user, trips }) {
       setFamilyMembers((currentMembers) => currentMembers.filter((member) => member.id !== memberId))
       setSelectedMemberIds((currentIds) => currentIds.filter((currentId) => currentId !== memberId))
     } catch (removeError) {
-      console.error('Unable to remove family member.', removeError)
+      console.error('Unable to remove person.', removeError)
       setError(removeError.message)
     } finally {
       setWorkingId('')
@@ -145,13 +145,13 @@ function FamilyAccessView({ user, trips }) {
       <section className="section-heading">
         <div>
           <p className="eyebrow">Together</p>
-          <h1>Family access</h1>
-          <p>Add family members once, then set the same access across multiple people and trips.</p>
+          <h1>People &amp; trip access</h1>
+          <p>Save people you travel with, then batch-assign their access across trips.</p>
         </div>
       </section>
 
       <section className="family-access-panel">
-        <h2>Add a family member</h2>
+        <h2>Add a person</h2>
         <form className="family-add-form" onSubmit={handleAddFamilyMember}>
           <label className="form-field">
             <span>Name</span>
@@ -162,7 +162,7 @@ function FamilyAccessView({ user, trips }) {
             <input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
           </label>
           <button className="primary-button" type="submit" disabled={isAdding}>
-            {isAdding ? 'Adding…' : 'Add to family list'}
+            {isAdding ? 'Adding…' : 'Add person'}
           </button>
         </form>
       </section>
@@ -171,7 +171,7 @@ function FamilyAccessView({ user, trips }) {
         <div className="family-bulk-heading">
           <div>
             <h2>Apply access in bulk</h2>
-            <p>Choose one or more family members and up to 50 trips, then apply one access level to all selections.</p>
+            <p>Choose one or more people and up to 50 trips, then apply one access level to all selections.</p>
           </div>
           <label className="form-field">
             <span>Access</span>
@@ -185,7 +185,7 @@ function FamilyAccessView({ user, trips }) {
 
         <div className="family-bulk-columns">
           <fieldset>
-            <legend>Family members</legend>
+            <legend>People</legend>
             <button
               className="text-button family-select-all"
               type="button"
@@ -195,7 +195,7 @@ function FamilyAccessView({ user, trips }) {
               {allMembersSelected ? 'Clear selection' : 'Select all'}
             </button>
             {isLoading
-              ? <p>Loading family list…</p>
+              ? <p>Loading people…</p>
               : familyMembers.length > 0
                 ? familyMembers.map((member) => (
                   <label className="family-selection-option" key={member.id}>
@@ -207,7 +207,7 @@ function FamilyAccessView({ user, trips }) {
                     <span><strong>{member.name}</strong><small>{member.email}</small></span>
                   </label>
                 ))
-                : <p>Add family members above to get started.</p>}
+                : <p>Add people above to get started.</p>}
           </fieldset>
 
           <fieldset>
@@ -249,9 +249,9 @@ function FamilyAccessView({ user, trips }) {
       {success && <p className="family-access-success" role="status">{success}</p>}
 
       <section className="family-access-panel">
-        <h2>Family list</h2>
+        <h2>People list</h2>
         {isLoading
-          ? <p>Loading family list…</p>
+        ? <p>Loading people…</p>
           : familyMembers.length > 0
             ? <div className="family-member-list">
               {familyMembers.map((member) => {
@@ -279,7 +279,7 @@ function FamilyAccessView({ user, trips }) {
                 )
               })}
             </div>
-            : <p>No family members saved yet.</p>}
+            : <p>No people saved yet.</p>}
       </section>
     </div>
   )
