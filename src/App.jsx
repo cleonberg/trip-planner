@@ -18,8 +18,10 @@ import {
   saveSharedTrip,
 } from './plannerStore.js'
 import SharedTripsView from './SharedTripsView.jsx'
+import FamilyAccessView from './FamilyAccessView.jsx'
 import TripInviteAcceptance from './TripInviteAcceptance.jsx'
 import TripShareDialog from './TripShareDialog.jsx'
+import { syncFamilyTripAccess } from './tripInvites.js'
 import './App.css'
 import './Auth.css'
 
@@ -141,8 +143,19 @@ function importLegacyYosemiteActivities(trips, days) {
 
 function getSharedTripData(trip) {
   return Object.fromEntries(
-    Object.entries(trip).filter(([key]) => key !== 'id' && key !== 'sharedRole'),
+    Object.entries(trip).filter(([key]) => !['id', 'sharedRole', 'locked'].includes(key)),
   )
+}
+
+function canContribute(role) {
+  return role === 'editor' || role === 'contributor'
+}
+
+function getFamilyAccessSyncError(error) {
+  if (['functions/not-found', 'functions/internal', 'functions/unavailable'].includes(error.code)) {
+    return 'Family access could not be checked. Verify that the latest Firebase Functions are deployed, then try again.'
+  }
+  return `Family access could not be checked: ${error.message}`
 }
 
 function PlannerApp({ user, initialView = 'lifetime' }) {
@@ -202,8 +215,19 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
   useEffect(() => {
     let active = true
 
-    const sharedTripsRequest = loadSharedTrips(user.uid)
-      .then((memberships) => ({ memberships }))
+    const sharedTripsRequest = (async () => {
+      let familySyncError = null
+      if (user.emailVerified) {
+        try {
+          await syncFamilyTripAccess()
+        } catch (error) {
+          console.error('Unable to refresh family trip access.', error)
+          familySyncError = error
+        }
+      }
+      const memberships = await loadSharedTrips(user.uid)
+      return { memberships, familySyncError }
+    })()
       .catch((error) => ({ error }))
 
     Promise.all([loadPlannerData(user.uid), sharedTripsRequest])
@@ -217,7 +241,11 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
           setSharedTrips([])
         } else {
           setSharedTrips(sharedTripsResult.memberships)
-          setSharedTripsError('')
+          setSharedTripsError(
+            sharedTripsResult.familySyncError
+              ? getFamilyAccessSyncError(sharedTripsResult.familySyncError)
+              : '',
+          )
         }
         setIsLoadingSharedTrips(false)
         setAnnualPlans(data.annualPlans)
@@ -238,7 +266,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
     return () => {
       active = false
     }
-  }, [user.uid, loadAttempt])
+  }, [user.uid, user.emailVerified, loadAttempt])
 
   useEffect(() => {
     let active = true
@@ -248,7 +276,10 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
       .then(({ trip, days: sharedDays }) => {
         if (!active) return
         const importedTrip = importLegacyYosemiteActivities([trip], sharedDays)[0]
-        const nextTrip = { ...importedTrip, sharedRole: selectedSharedTrip.role }
+        const nextTrip = {
+          ...importedTrip,
+          sharedRole: selectedSharedTrip.role === 'editor' ? 'contributor' : selectedSharedTrip.role,
+        }
         savedSharedTrip.current = JSON.stringify(getSharedTripData(nextTrip))
         setSharedTrip(nextTrip)
         setSharedTripLoadState('ready')
@@ -302,7 +333,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
 
   useEffect(() => {
     if (sharedTripLoadState !== 'ready'
-      || !selectedSharedTrip || selectedSharedTrip.role !== 'editor' || !sharedTrip) return undefined
+      || !selectedSharedTrip || !canContribute(selectedSharedTrip.role) || !sharedTrip || sharedTrip.locked) return undefined
 
     const nextData = getSharedTripData(sharedTrip)
     const serialized = JSON.stringify(nextData)
@@ -524,8 +555,14 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
     setIsMobileMenuOpen(false)
   }
 
+  function toggleTripLock(tripId) {
+    setTrips((currentTrips) => currentTrips.map((trip) => (
+      trip.id === tripId ? { ...trip, locked: !trip.locked } : trip
+    )))
+  }
+
   async function openSharedTrip(membership) {
-    if (sharedTrip && selectedSharedTrip?.role === 'editor') {
+    if (sharedTrip && canContribute(selectedSharedTrip?.role) && !sharedTrip.locked) {
       const currentData = JSON.stringify(getSharedTripData(sharedTrip))
       if (currentData !== savedSharedTrip.current) {
         try {
@@ -940,7 +977,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
         saveQueue.current.catch(() => {}),
         sharedSaveQueue.current.catch(() => {}),
       ])
-      if (sharedTrip && selectedSharedTrip?.role === 'editor') {
+      if (sharedTrip && canContribute(selectedSharedTrip?.role) && !sharedTrip.locked) {
         await saveSharedTrip(selectedSharedTrip.ownerUid, selectedSharedTrip.tripId, sharedTrip)
         savedSharedTrip.current = JSON.stringify(getSharedTripData(sharedTrip))
       }
@@ -1026,6 +1063,12 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
           }}>
             <span>✦</span> Wish list
           </button>
+          <button className={`nav-item${currentView === 'family' ? ' active' : ''}`} type="button" onClick={() => {
+            setCurrentView('family')
+            setIsMobileMenuOpen(false)
+          }}>
+            <span>♧</span> Family access
+          </button>
           <button className={`nav-item${currentView === 'shared' || currentView === 'shared-trip' ? ' active' : ''}`} type="button" onClick={() => {
             setCurrentView('shared')
             setIsMobileMenuOpen(false)
@@ -1055,6 +1098,8 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
                   ? 'Lifetime overview'
                   : currentView === 'wishlist'
                     ? 'Wish list'
+                    : currentView === 'family'
+                      ? 'Family access'
                     : currentView === 'shared'
                       ? 'Shared trips'
                       : currentView === 'shared-trip'
@@ -1110,12 +1155,20 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
           />
         )}
 
+        {currentView === 'family' && (
+          <FamilyAccessView user={user} trips={trips} />
+        )}
+
         {currentView === 'shared' && (
           <SharedTripsView
             trips={sharedTrips}
             isLoading={isLoadingSharedTrips}
             error={sharedTripsError}
             onOpen={openSharedTrip}
+            onManageFamily={() => {
+              setCurrentView('family')
+              setIsMobileMenuOpen(false)
+            }}
           />
         )}
 
@@ -1135,6 +1188,9 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
             onUpdateItem={updateWishlistItem}
             onUpdateTrip={updateTripDetails}
             canShare
+            canManageLock
+            locked={selectedTrip.locked}
+            onToggleLock={() => toggleTripLock(selectedTrip.id)}
             onShareTrip={() => setIsShareInfoOpen(true)}
           />
         )}
@@ -1171,7 +1227,8 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
             onUpdateTrip={(updatedTrip) => setSharedTrip((currentTrip) => (
               currentTrip ? { ...currentTrip, ...updatedTrip } : currentTrip
             ))}
-            canEdit={selectedSharedTrip.role === 'editor'}
+            canEdit={canContribute(selectedSharedTrip.role) && !sharedTrip.locked}
+            locked={sharedTrip.locked}
             showWishlist={false}
             backLabel="Back to shared trips"
           />

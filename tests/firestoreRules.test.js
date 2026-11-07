@@ -29,7 +29,15 @@ before(async () => {
         id: 'trip-1',
         name: 'Test trip',
       }),
+      setDoc(doc(firestore, 'users', 'owner-uid', 'trips', 'locked-trip'), {
+        id: 'locked-trip',
+        name: 'Locked trip',
+        locked: true,
+      }),
       setDoc(doc(firestore, 'users', 'owner-uid', 'trips', 'trip-1', 'days', 'day-1'), {
+        activities: [],
+      }),
+      setDoc(doc(firestore, 'users', 'owner-uid', 'trips', 'locked-trip', 'days', 'day-1'), {
         activities: [],
       }),
       setDoc(doc(firestore, 'users', 'owner-uid', 'trips', 'trip-1', 'members', 'owner-uid'), {
@@ -44,6 +52,10 @@ before(async () => {
         userId: 'editor-uid',
         role: 'editor',
       }),
+      setDoc(doc(firestore, 'users', 'owner-uid', 'trips', 'locked-trip', 'members', 'editor-uid'), {
+        userId: 'editor-uid',
+        role: 'editor',
+      }),
       setDoc(doc(firestore, 'users', 'owner-uid', 'trips', 'trip-1', 'invites', 'invite-1'), {
         email: 'invitee@example.com',
         status: 'pending',
@@ -53,6 +65,11 @@ before(async () => {
         tripId: 'trip-1',
       }),
       setDoc(doc(firestore, 'users', 'owner-uid', 'campaigns', 'campaign-1'), { name: 'Private campaign' }),
+      setDoc(doc(firestore, 'users', 'owner-uid', 'familyMembers', 'family-1'), {
+        name: 'Family member',
+        email: 'family@example.com',
+        access: {},
+      }),
     ])
   })
 })
@@ -101,6 +118,20 @@ test('editors can change trip content but cannot delete the trip or manage membe
   }))
 })
 
+test('locking a trip leaves it readable but prevents contributors from changing trip content', async () => {
+  const editorFirestore = firestoreFor('editor-uid')
+  const lockedTrip = doc(editorFirestore, 'users', 'owner-uid', 'trips', 'locked-trip')
+  const lockedDay = doc(editorFirestore, 'users', 'owner-uid', 'trips', 'locked-trip', 'days', 'day-1')
+  await assertSucceeds(getDoc(lockedTrip))
+  await assertSucceeds(getDoc(lockedDay))
+  await assertFails(updateDoc(lockedTrip, { name: 'Accidental change' }))
+  await assertFails(updateDoc(lockedTrip, { locked: false }))
+  await assertFails(updateDoc(lockedDay, { activities: ['Accidental change'] }))
+  await assertSucceeds(updateDoc(doc(firestoreFor('owner-uid'), 'users', 'owner-uid', 'trips', 'locked-trip'), {
+    locked: false,
+  }))
+})
+
 test('uninvited users cannot access a trip', async () => {
   const firestore = firestoreFor('outsider-uid')
   await assertFails(getDoc(tripDocument(firestore)))
@@ -117,7 +148,9 @@ test('shared-trip indexes are private and read-only to their recipient', async (
   await assertFails(getDoc(doc(firestoreFor('outsider-uid'), 'users', 'viewer-uid', 'sharedTrips', 'trip-ref')))
 })
 
-test('the other app collections remain private to their owner', async () => {
+test('family contacts and the other app collections remain private to their owner', async () => {
   await assertSucceeds(getDoc(doc(firestoreFor('owner-uid'), 'users', 'owner-uid', 'campaigns', 'campaign-1')))
   await assertFails(getDoc(doc(firestoreFor('viewer-uid'), 'users', 'owner-uid', 'campaigns', 'campaign-1')))
+  await assertSucceeds(getDoc(doc(firestoreFor('owner-uid'), 'users', 'owner-uid', 'familyMembers', 'family-1')))
+  await assertFails(getDoc(doc(firestoreFor('viewer-uid'), 'users', 'owner-uid', 'familyMembers', 'family-1')))
 })

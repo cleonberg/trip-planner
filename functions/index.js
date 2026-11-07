@@ -1,5 +1,6 @@
 const { randomBytes, randomUUID, createHash, timingSafeEqual } = require('node:crypto')
 const { initializeApp } = require('firebase-admin/app')
+const { getAuth } = require('firebase-admin/auth')
 const { FieldValue, Timestamp, getFirestore } = require('firebase-admin/firestore')
 const { HttpsError, onCall } = require('firebase-functions/https')
 const { setGlobalOptions } = require('firebase-functions')
@@ -28,6 +29,19 @@ function getInviteRef(ownerUid, tripId, inviteId) {
   return db.doc(`users/${ownerUid}/trips/${tripId}/invites/${inviteId}`)
 }
 
+async function revokePendingTripInvites(ownerUid, tripId, email) {
+  const invites = await db.collection(`users/${ownerUid}/trips/${tripId}/invites`)
+    .where('email', '==', email)
+    .get()
+  const pendingInvites = invites.docs.filter((invite) => invite.data().status === 'pending')
+  if (pendingInvites.length === 0) return
+  const batch = db.batch()
+  pendingInvites.forEach((invite) => {
+    batch.update(invite.ref, { status: 'revoked', revokedAt: FieldValue.serverTimestamp() })
+  })
+  await batch.commit()
+}
+
 function getMemberRef(ownerUid, tripId, memberUid) {
   return db.doc(`users/${ownerUid}/trips/${tripId}/members/${memberUid}`)
 }
@@ -37,6 +51,49 @@ function getSharedTripRef(memberUid, ownerUid, tripId) {
     .update(`${ownerUid}\0${tripId}`)
     .digest('hex')
   return db.doc(`users/${memberUid}/sharedTrips/${membershipId}`)
+}
+
+function getFamilyMemberRef(ownerUid, memberId) {
+  return db.doc(`users/${ownerUid}/familyMembers/${memberId}`)
+}
+
+async function updateFamilyTripMembership({ ownerUid, memberUid, tripId, role, tripName, email }) {
+  const memberRef = getMemberRef(ownerUid, tripId, memberUid)
+  const sharedTripRef = getSharedTripRef(memberUid, ownerUid, tripId)
+  const batch = db.batch()
+
+  if (role === 'none') {
+    batch.delete(memberRef)
+    batch.delete(sharedTripRef)
+  } else {
+    const memberRole = role === 'contributor' ? 'editor' : 'viewer'
+    batch.set(memberRef, {
+      userId: memberUid,
+      email,
+      role: memberRole,
+      invitedBy: ownerUid,
+      addedAt: FieldValue.serverTimestamp(),
+    })
+    batch.set(sharedTripRef, {
+      ownerUid,
+      tripId,
+      tripName: tripName || 'Shared trip',
+      role,
+      joinedAt: FieldValue.serverTimestamp(),
+    })
+  }
+
+  await batch.commit()
+}
+
+async function findVerifiedAccount(email) {
+  try {
+    const account = await getAuth().getUserByEmail(email)
+    return account.emailVerified ? account : null
+  } catch (error) {
+    if (error.code === 'auth/user-not-found') return null
+    throw error
+  }
 }
 
 function hashToken(token) {
@@ -207,4 +264,179 @@ exports.revokeTripMember = onCall(async (request) => {
     .commit()
 
   return { memberUid }
+})
+
+exports.setFamilyTripAccess = onCall(async (request) => {
+  const auth = requireOwner(request, request.auth?.uid)
+  const memberId = requireDocumentId(request.data?.memberId, 'family member ID')
+  const requestedTripIds = Array.isArray(request.data?.tripIds)
+    ? request.data.tripIds
+    : [request.data?.tripId]
+  if (requestedTripIds.length === 0 || requestedTripIds.length > 50) {
+    throw new HttpsError('invalid-argument', 'Choose between 1 and 50 trips.')
+  }
+  const tripIds = requestedTripIds.map((tripId) => requireDocumentId(tripId, 'trip ID'))
+  if (new Set(tripIds).size !== tripIds.length) {
+    throw new HttpsError('invalid-argument', 'A trip can only be selected once.')
+  }
+  const role = request.data?.role
+  if (!['none', 'viewer', 'contributor'].includes(role)) {
+    throw new HttpsError('invalid-argument', 'Choose none, viewer, or contributor access.')
+  }
+
+  const familyMemberRef = getFamilyMemberRef(auth.uid, memberId)
+  const [familyMemberSnapshot, tripSnapshots] = await Promise.all([
+    familyMemberRef.get(),
+    Promise.all(tripIds.map((tripId) => db.doc(`users/${auth.uid}/trips/${tripId}`).get())),
+  ])
+  if (!familyMemberSnapshot.exists) {
+    throw new HttpsError('not-found', 'That family member could not be found.')
+  }
+  if (tripSnapshots.some((tripSnapshot) => !tripSnapshot.exists)) {
+    throw new HttpsError('not-found', 'That trip could not be found.')
+  }
+
+  const familyMember = familyMemberSnapshot.data()
+  const email = typeof familyMember.email === 'string' ? familyMember.email.toLowerCase() : ''
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    throw new HttpsError('failed-precondition', 'The family member email address is invalid.')
+  }
+  const account = role === 'none' ? null : await findVerifiedAccount(email)
+  const memberUid = account?.uid ?? familyMember.accountUid
+  if (memberUid === auth.uid && role !== 'none') {
+    throw new HttpsError('failed-precondition', 'You already own this trip.')
+  }
+  const access = { ...(familyMember.access ?? {}) }
+  const pendingAccess = { ...(familyMember.pendingAccess ?? {}) }
+  tripIds.forEach((tripId) => {
+    if (role === 'none') {
+      delete access[tripId]
+      delete pendingAccess[tripId]
+    } else {
+      access[tripId] = role
+      if (memberUid) delete pendingAccess[tripId]
+      else pendingAccess[tripId] = true
+    }
+  })
+
+  const pendingInviteSnapshots = await Promise.all(tripIds.map((tripId) => (
+    db.collection(`users/${auth.uid}/trips/${tripId}/invites`)
+      .where('email', '==', email)
+      .get()
+  )))
+  const pendingInvites = pendingInviteSnapshots.flatMap((snapshot) => (
+    snapshot.docs.filter((invite) => invite.data().status === 'pending')
+  ))
+  if (pendingInvites.length + tripIds.length * (memberUid && memberUid !== auth.uid ? 2 : 0) + 1 > 500) {
+    throw new HttpsError('resource-exhausted', 'Too many existing invitations to update these trips at once.')
+  }
+
+  const batch = db.batch()
+  batch.update(familyMemberRef, {
+    access,
+    pendingAccess,
+    ...(account ? { accountUid: account.uid } : {}),
+  })
+  pendingInvites.forEach((invite) => {
+    batch.update(invite.ref, { status: 'revoked', revokedAt: FieldValue.serverTimestamp() })
+  })
+  if (memberUid && memberUid !== auth.uid) {
+    tripIds.forEach((tripId, index) => {
+      const memberRef = getMemberRef(auth.uid, tripId, memberUid)
+      const sharedTripRef = getSharedTripRef(memberUid, auth.uid, tripId)
+      if (role === 'none') {
+        batch.delete(memberRef)
+        batch.delete(sharedTripRef)
+        return
+      }
+      batch.set(memberRef, {
+        userId: memberUid,
+        email,
+        role: role === 'contributor' ? 'editor' : 'viewer',
+        invitedBy: auth.uid,
+        addedAt: FieldValue.serverTimestamp(),
+      })
+      batch.set(sharedTripRef, {
+        ownerUid: auth.uid,
+        tripId,
+        tripName: tripSnapshots[index].data().name || 'Shared trip',
+        role,
+        joinedAt: FieldValue.serverTimestamp(),
+      })
+    })
+  }
+  await batch.commit()
+
+  return {
+    memberId,
+    tripId: tripIds[0],
+    tripIds,
+    role,
+    pending: role !== 'none' && !memberUid,
+  }
+})
+
+exports.syncFamilyTripAccess = onCall(async (request) => {
+  const auth = requireAuthenticatedUser(request)
+  const email = typeof auth.token.email === 'string' ? auth.token.email.toLowerCase() : ''
+  if (!email || auth.token.email_verified !== true) {
+    return { synced: 0 }
+  }
+
+  const contacts = await db.collectionGroup('familyMembers').where('email', '==', email).get()
+  let synced = 0
+  for (const contactSnapshot of contacts.docs) {
+    const ownerUid = contactSnapshot.ref.parent.parent?.id
+    if (!ownerUid || ownerUid === auth.uid) continue
+    const contact = contactSnapshot.data()
+    const assignments = contact.access ?? {}
+    for (const [tripId, role] of Object.entries(assignments)) {
+      if (!['viewer', 'contributor'].includes(role)) continue
+      const tripSnapshot = await db.doc(`users/${ownerUid}/trips/${tripId}`).get()
+      if (!tripSnapshot.exists) continue
+      await updateFamilyTripMembership({
+        ownerUid,
+        memberUid: auth.uid,
+        tripId,
+        role,
+        tripName: tripSnapshot.data().name,
+        email,
+      })
+      const pendingAccess = { ...(contact.pendingAccess ?? {}) }
+      delete pendingAccess[tripId]
+      await contactSnapshot.ref.update({ pendingAccess, accountUid: auth.uid })
+      synced += 1
+    }
+  }
+
+  return { synced }
+})
+
+exports.deleteFamilyMember = onCall(async (request) => {
+  const auth = requireOwner(request, request.auth?.uid)
+  const memberId = requireDocumentId(request.data?.memberId, 'family member ID')
+  const familyMemberRef = getFamilyMemberRef(auth.uid, memberId)
+  const familyMemberSnapshot = await familyMemberRef.get()
+  if (!familyMemberSnapshot.exists) {
+    throw new HttpsError('not-found', 'That family member could not be found.')
+  }
+
+  const familyMember = familyMemberSnapshot.data()
+  const email = typeof familyMember.email === 'string' ? familyMember.email.toLowerCase() : ''
+  const account = await findVerifiedAccount(email)
+  const memberUid = account?.uid ?? familyMember.accountUid
+  if (memberUid && memberUid !== auth.uid) {
+    for (const tripId of Object.keys(familyMember.access ?? {})) {
+      await revokePendingTripInvites(auth.uid, tripId, email)
+      await updateFamilyTripMembership({
+        ownerUid: auth.uid,
+        memberUid,
+        tripId,
+        role: 'none',
+        email,
+      })
+    }
+  }
+  await familyMemberRef.delete()
+  return { memberId }
 })

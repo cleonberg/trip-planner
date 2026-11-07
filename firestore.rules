@@ -21,7 +21,8 @@ service cloud.firestore {
       return signedIn()
         && (request.auth.uid == userId
           || (exists(tripMemberPath(userId, tripId, request.auth.uid))
-            && get(tripMemberPath(userId, tripId, request.auth.uid)).data.role == 'editor'));
+            && get(tripMemberPath(userId, tripId, request.auth.uid)).data.role == 'editor'
+            && get(/databases/$(database)/documents/users/$(userId)/trips/$(tripId)).data.get('locked', false) != true));
     }
 
     match /users/{userId}/campaigns/{campaignId} {
@@ -36,6 +37,10 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
 
+    match /users/{userId}/familyMembers/{memberId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
     match /users/{userId}/cashTransactions/{transactionId} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
@@ -47,7 +52,10 @@ service cloud.firestore {
     match /users/{userId}/trips/{tripId} {
       allow read: if canReadTrip(userId, tripId);
       allow create, delete: if signedIn() && request.auth.uid == userId;
-      allow update: if canEditTrip(userId, tripId);
+      allow update: if signedIn()
+        && (request.auth.uid == userId
+          || (canEditTrip(userId, tripId)
+            && request.resource.data.get('locked', false) == resource.data.get('locked', false)));
 
       match /days/{dayId} {
         allow read: if canReadTrip(userId, tripId);

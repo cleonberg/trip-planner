@@ -89,8 +89,11 @@ function TripPreview({
   onUpdateItem,
   onUpdateTrip,
   onShareTrip,
+  onToggleLock,
   canEdit = true,
   canShare = false,
+  canManageLock = false,
+  locked = false,
   showWishlist = true,
   backLabel = 'Back to lifetime overview',
 }) {
@@ -764,13 +767,30 @@ function TripPreview({
                 {isEditingDetails ? 'Close editor' : 'Edit trip details'}
               </button>
             )}
+            {canManageLock && (
+              <button
+                className="secondary-button"
+                type="button"
+                aria-pressed={locked}
+                onClick={onToggleLock}
+              >
+                {locked ? 'Unlock trip' : 'Lock contributors'}
+              </button>
+            )}
             {canShare && (
               <button className="primary-button" type="button" onClick={onShareTrip}>
-                Share trip
+                Manage access
               </button>
             )}
           </div>
         </div>
+        {locked && (
+          <p className="trip-lock-notice" role="status">
+            {canManageLock
+              ? 'Trip locked for contributors. You can still make changes.'
+              : 'This trip is locked by the owner and is currently view-only.'}
+          </p>
+        )}
         <p>{trip.location}{trip.locationDetails ? ` · ${trip.locationDetails}` : ''}</p>
         <div className="trip-preview-stats">
           <article><span>When</span><strong>{trip.dates || 'Dates not set'}</strong></article>

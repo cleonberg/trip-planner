@@ -1,41 +1,48 @@
 import { useCallback, useEffect, useState } from 'react'
-import { loadTripInvites, loadTripMembers } from './plannerStore.js'
-import { createTripInvite, revokeTripInvite, revokeTripMember } from './tripInvites.js'
-
-function makeInviteUrl(userId, tripId, invite) {
-  const url = new URL(`${window.location.origin}${window.location.pathname}`)
-  url.searchParams.set('inviteOwner', userId)
-  url.searchParams.set('inviteTrip', tripId)
-  url.searchParams.set('inviteId', invite.inviteId)
-  url.searchParams.set('inviteToken', invite.token)
-  return url.toString()
-}
+import {
+  createFamilyMember,
+  loadFamilyMembers,
+  loadTripInvites,
+  loadTripMembers,
+} from './plannerStore.js'
+import {
+  deleteFamilyMember,
+  revokeTripInvite,
+  revokeTripMember,
+  setFamilyTripAccess,
+} from './tripInvites.js'
 
 function getExpiryLabel(timestamp) {
   if (!timestamp?.toDate) return ''
   return `Expires ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(timestamp.toDate())}`
 }
 
+function displayRole(role) {
+  return role === 'editor' ? 'contributor' : role
+}
+
 function TripShareDialog({ user, trip, onClose }) {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState('viewer')
-  const [inviteUrl, setInviteUrl] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState('viewer')
+  const [familyMembers, setFamilyMembers] = useState([])
   const [members, setMembers] = useState([])
   const [invites, setInvites] = useState([])
   const [isLoadingAccess, setIsLoadingAccess] = useState(true)
-  const [isCreatingInvite, setIsCreatingInvite] = useState(false)
+  const [isAddingFamilyMember, setIsAddingFamilyMember] = useState(false)
   const [workingId, setWorkingId] = useState('')
-  const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
 
   const refreshAccess = useCallback(async () => {
     setIsLoadingAccess(true)
     setError('')
     try {
-      const [nextMembers, nextInvites] = await Promise.all([
+      const [nextFamilyMembers, nextMembers, nextInvites] = await Promise.all([
+        loadFamilyMembers(user.uid),
         loadTripMembers(user.uid, trip.id),
         loadTripInvites(user.uid, trip.id),
       ])
+      setFamilyMembers(nextFamilyMembers)
       setMembers(nextMembers)
       setInvites(nextInvites)
     } catch (loadError) {
@@ -57,33 +64,80 @@ function TripShareDialog({ user, trip, onClose }) {
     }
   }, [refreshAccess])
 
-  async function handleCreateInvite(event) {
+  async function handleAddFamilyMember(event) {
     event.preventDefault()
-    setIsCreatingInvite(true)
+    setIsAddingFamilyMember(true)
     setError('')
-    setInviteUrl('')
-    setCopied(false)
     try {
-      const invite = await createTripInvite({ tripId: trip.id, email, role })
-      setInviteUrl(makeInviteUrl(user.uid, trip.id, invite))
+      if (familyMembers.some((member) => member.email?.toLowerCase() === email.trim().toLowerCase())) {
+        throw new Error('That email is already in your family list.')
+      }
+      const familyMember = await createFamilyMember(user.uid, { name, email })
+      setFamilyMembers((currentMembers) => [...currentMembers, familyMember])
+      setName('')
       setEmail('')
+      if (newMemberRole !== 'none') {
+        const result = await setFamilyTripAccess({
+          memberId: familyMember.id,
+          tripId: trip.id,
+          role: newMemberRole,
+        })
+        if (result.pending) {
+          setFamilyMembers((currentMembers) => currentMembers.map((member) => (
+            member.id === familyMember.id
+              ? { ...member, pendingAccess: { ...member.pendingAccess, [trip.id]: true } }
+              : member
+          )))
+        }
+      }
       await refreshAccess()
     } catch (createError) {
-      console.error('Unable to create trip invite.', createError)
+      console.error('Unable to add family member to trip access.', createError)
       setError(createError.message)
     } finally {
-      setIsCreatingInvite(false)
+      setIsAddingFamilyMember(false)
     }
   }
 
-  async function handleCopyInvite() {
+  async function handleSetFamilyAccess(memberId, role) {
+    setWorkingId(memberId)
+    setError('')
     try {
-      await navigator.clipboard.writeText(inviteUrl)
-      setCopied(true)
-      setError('')
-    } catch (copyError) {
-      console.error('Unable to copy trip invite link.', copyError)
-      setError('Could not copy the link. Select and copy it manually.')
+      const result = await setFamilyTripAccess({ memberId, tripId: trip.id, role })
+      setFamilyMembers((currentMembers) => currentMembers.map((member) => {
+        if (member.id !== memberId) return member
+        const access = { ...member.access }
+        const pendingAccess = { ...member.pendingAccess }
+        if (role === 'none') {
+          delete access[trip.id]
+          delete pendingAccess[trip.id]
+        } else {
+          access[trip.id] = role
+          if (result.pending) pendingAccess[trip.id] = true
+          else delete pendingAccess[trip.id]
+        }
+        return { ...member, access, pendingAccess }
+      }))
+      await loadTripMembers(user.uid, trip.id).then(setMembers)
+    } catch (accessError) {
+      console.error('Unable to update family trip access.', accessError)
+      setError(accessError.message)
+    } finally {
+      setWorkingId('')
+    }
+  }
+
+  async function handleRemoveFamilyMember(memberId) {
+    setWorkingId(memberId)
+    setError('')
+    try {
+      await deleteFamilyMember({ memberId })
+      await refreshAccess()
+    } catch (removeError) {
+      console.error('Unable to remove family member.', removeError)
+      setError(removeError.message)
+    } finally {
+      setWorkingId('')
     }
   }
 
@@ -115,14 +169,29 @@ function TripShareDialog({ user, trip, onClose }) {
     }
   }
 
+  const familyEmails = new Set(familyMembers.map((member) => member.email?.toLowerCase()))
+  const legacyMembers = members.filter((member) => (
+    member.role !== 'owner' && !familyEmails.has(member.email?.toLowerCase())
+  ))
+
   return (
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title">
         <button className="close-form dialog-close" type="button" aria-label="Close" onClick={onClose}>×</button>
         <div className="share-dialog-icon">↗</div>
-        <h2 id="share-title">Share {trip.name}</h2>
-        <p>Invite someone by email. They must sign in with that verified Google account. Links expire after 7 days and can be used once. Create links from the deployed site; localhost links will not work for them.</p>
-        <form className="trip-invite-form" onSubmit={handleCreateInvite}>
+        <h2 id="share-title">Trip access</h2>
+        <p>Add family emails once, then choose who can see or contribute to each trip. Family members sign in with that verified email to see trips they can access.</p>
+        <form className="trip-invite-form" onSubmit={handleAddFamilyMember}>
+          <label className="form-field">
+            <span>Name</span>
+            <input
+              autoComplete="name"
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Family member"
+            />
+          </label>
           <label className="form-field">
             <span>Email address</span>
             <input
@@ -135,57 +204,79 @@ function TripShareDialog({ user, trip, onClose }) {
             />
           </label>
           <label className="form-field">
-            <span>Access</span>
-            <select value={role} onChange={(event) => setRole(event.target.value)}>
+            <span>Access to this trip</span>
+            <select value={newMemberRole} onChange={(event) => setNewMemberRole(event.target.value)}>
+              <option value="none">None · save to family list only</option>
               <option value="viewer">Viewer · can view the trip</option>
-              <option value="editor">Editor · can change trip details and activities</option>
+              <option value="contributor">Contributor · can edit the trip</option>
             </select>
           </label>
-          <button className="primary-button" type="submit" disabled={isCreatingInvite}>
-            {isCreatingInvite ? 'Creating invite…' : 'Create invite link'}
+          <button className="primary-button" type="submit" disabled={isAddingFamilyMember}>
+            {isAddingFamilyMember ? 'Adding…' : 'Add family member'}
           </button>
         </form>
-        {inviteUrl && (
-          <div className="trip-invite-link">
-            <label className="form-field">
-              <span>Copy and send this one-time link</span>
-              <input readOnly value={inviteUrl} onFocus={(event) => event.target.select()} />
-            </label>
-            <button className="secondary-button" type="button" onClick={handleCopyInvite}>
-              {copied ? 'Copied' : 'Copy link'}
-            </button>
-          </div>
-        )}
+
         {error && <p className="trip-invite-error" role="alert">{error}</p>}
-        <section className="trip-access-list" aria-label="Trip access">
-          <h3>People with access</h3>
+        <section className="trip-access-list" aria-label="Family trip access">
+          <h3>Family access to {trip.name}</h3>
           {isLoadingAccess
             ? <p>Loading access…</p>
-            : members.length > 0
-              ? members.map((member) => (
-                <div className="trip-access-row" key={member.userId}>
-                  <span>{member.role === 'owner' ? 'You · Owner' : member.email || member.userId}</span>
-                  <strong>{member.role}</strong>
-                  {member.role !== 'owner' && (
-                    <button
-                      className="text-button"
-                      type="button"
-                      disabled={workingId === member.userId}
-                      onClick={() => handleRemoveMember(member.userId)}
-                    >
-                      Remove
-                    </button>
-                  )}
+            : familyMembers.length > 0
+              ? familyMembers.map((member) => (
+                <div className="trip-access-row family-access-row" key={member.id}>
+                  <span>
+                    <strong>{member.name || member.email}</strong>
+                    <small>{member.email}</small>
+                    {member.pendingAccess?.[trip.id] && <small className="family-access-pending">Waiting for verified sign-in</small>}
+                  </span>
+                  <select
+                    aria-label={`${member.name || member.email} access to ${trip.name}`}
+                    value={member.access?.[trip.id] ?? 'none'}
+                    disabled={workingId === member.id}
+                    onChange={(event) => handleSetFamilyAccess(member.id, event.target.value)}
+                  >
+                    <option value="none">None</option>
+                    <option value="viewer">Viewer</option>
+                    <option value="contributor">Contributor</option>
+                  </select>
+                  <button
+                    className="text-button"
+                    type="button"
+                    disabled={workingId === member.id}
+                    onClick={() => handleRemoveFamilyMember(member.id)}
+                  >
+                    Remove
+                  </button>
                 </div>
               ))
-              : <p>No members found.</p>}
+              : <p>No family members yet. Add their emails above to get started.</p>}
         </section>
+
+        {legacyMembers.length > 0 && (
+          <section className="trip-access-list" aria-label="Other trip members">
+            <h3>Other people with access</h3>
+            {legacyMembers.map((member) => (
+              <div className="trip-access-row" key={member.userId}>
+                <span>{member.email || member.userId}</span>
+                <strong>{displayRole(member.role)}</strong>
+                <button
+                  className="text-button"
+                  type="button"
+                  disabled={workingId === member.userId}
+                  onClick={() => handleRemoveMember(member.userId)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
         {invites.some((invite) => invite.status === 'pending') && (
-          <section className="trip-access-list" aria-label="Pending invites">
-            <h3>Pending invites</h3>
+          <section className="trip-access-list" aria-label="Pending invitations">
+            <h3>Pending invitations</h3>
             {invites.filter((invite) => invite.status === 'pending').map((invite) => (
               <div className="trip-access-row" key={invite.id}>
-                <span>{invite.email} · {invite.role} · {getExpiryLabel(invite.expiresAt)}</span>
+                <span>{invite.email} · {displayRole(invite.role)} · {getExpiryLabel(invite.expiresAt)}</span>
                 <button
                   className="text-button"
                   type="button"

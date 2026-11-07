@@ -47,6 +47,23 @@ export async function loadSharedTrips(userId) {
   return toItems(memberships)
 }
 
+export async function loadFamilyMembers(userId) {
+  const members = await getDocs(collection(db, 'users', userId, 'familyMembers'))
+  return toItems(members)
+}
+
+export async function createFamilyMember(userId, { name, email }) {
+  const reference = doc(collection(db, 'users', userId, 'familyMembers'))
+  const normalizedEmail = email.trim().toLowerCase()
+  await setDoc(reference, {
+    name: name.trim(),
+    email: normalizedEmail,
+    access: {},
+    pendingAccess: {},
+  })
+  return { id: reference.id, name: name.trim(), email: normalizedEmail, access: {}, pendingAccess: {} }
+}
+
 export async function loadSharedTrip(ownerUid, tripId) {
   const tripReference = doc(db, 'users', ownerUid, 'trips', tripId)
   const [trip, days] = await Promise.all([
@@ -62,7 +79,7 @@ export async function loadSharedTrip(ownerUid, tripId) {
 
 export async function saveSharedTrip(ownerUid, tripId, trip) {
   const data = Object.fromEntries(
-    Object.entries(trip).filter(([key]) => key !== 'id' && key !== 'sharedRole'),
+    Object.entries(trip).filter(([key]) => !['id', 'sharedRole', 'locked'].includes(key)),
   )
   await updateDoc(
     doc(db, 'users', ownerUid, 'trips', tripId),

@@ -21,3 +21,15 @@ export function revokeTripInvite(data) {
 export function revokeTripMember(data) {
   return callFunction('revokeTripMember', data)
 }
+
+export function setFamilyTripAccess(data) {
+  return callFunction('setFamilyTripAccess', data)
+}
+
+export function syncFamilyTripAccess() {
+  return callFunction('syncFamilyTripAccess', {})
+}
+
+export function deleteFamilyMember(data) {
+  return callFunction('deleteFamilyMember', data)
+}
