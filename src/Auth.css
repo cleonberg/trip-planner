@@ -67,3 +67,11 @@
     display: none;
   }
 }
+
+.invite-actions .secondary-button {
+  width: 100%;
+}
+
+.invite-actions .text-button {
+  justify-self: center;
+}

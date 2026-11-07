@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 import { db } from './firebase.js'
 
 function getCollections(userId) {
@@ -14,18 +14,75 @@ function toItems(snapshot) {
   return snapshot.docs.map((document) => ({ ...document.data(), id: document.id }))
 }
 
+async function ensureOwnerMembership(userId, tripId) {
+  const membership = doc(db, 'users', userId, 'trips', tripId, 'members', userId)
+  const snapshot = await getDoc(membership)
+  if (snapshot.exists()) {
+    if (snapshot.data().role !== 'owner') {
+      throw new Error(`The signed-in user is not the owner of trip ${tripId}.`)
+    }
+    return
+  }
+  await setDoc(membership, { userId, role: 'owner' })
+}
+
 export async function loadPlannerData(userId) {
   const collections = getCollections(userId)
   const [trips, annualPlans, wishlistItems, days] = await Promise.all(
     Object.values(collections).map((reference) => getDocs(reference)),
   )
+  const loadedTrips = toItems(trips)
+  await Promise.all(loadedTrips.map((trip) => ensureOwnerMembership(userId, trip.id)))
 
   return {
-    trips: toItems(trips),
+    trips: loadedTrips,
     annualPlans: toItems(annualPlans),
     wishlistItems: toItems(wishlistItems),
     days: toItems(days),
   }
+}
+
+export async function loadSharedTrips(userId) {
+  const memberships = await getDocs(collection(db, 'users', userId, 'sharedTrips'))
+  return toItems(memberships)
+}
+
+export async function loadSharedTrip(ownerUid, tripId) {
+  const tripReference = doc(db, 'users', ownerUid, 'trips', tripId)
+  const [trip, days] = await Promise.all([
+    getDoc(tripReference),
+    getDocs(collection(tripReference, 'days')),
+  ])
+  if (!trip.exists()) throw new Error('This shared trip no longer exists.')
+  return {
+    trip: { ...trip.data(), id: trip.id },
+    days: toItems(days),
+  }
+}
+
+export async function saveSharedTrip(ownerUid, tripId, trip) {
+  const data = Object.fromEntries(
+    Object.entries(trip).filter(([key]) => key !== 'id' && key !== 'sharedRole'),
+  )
+  await updateDoc(
+    doc(db, 'users', ownerUid, 'trips', tripId),
+    removeUndefined(data),
+  )
+}
+
+export async function loadTripMembers(ownerUid, tripId) {
+  const members = await getDocs(collection(db, 'users', ownerUid, 'trips', tripId, 'members'))
+  return toItems(members)
+}
+
+export async function loadTripInvites(ownerUid, tripId) {
+  const invites = await getDocs(collection(db, 'users', ownerUid, 'trips', tripId, 'invites'))
+  return invites.docs.map((document) => {
+    const invite = Object.fromEntries(
+      Object.entries(document.data()).filter(([key]) => key !== 'tokenHash'),
+    )
+    return { ...invite, id: document.id }
+  })
 }
 
 function removeUndefined(value) {
@@ -101,5 +158,11 @@ export async function savePlannerData(userId, previousData, nextData) {
     Object.entries(collections).map(([name, reference]) => (
       syncCollection(reference, name, previousData[name], nextData[name])
     )),
+  )
+  const previousTripIds = new Set(previousData.trips.map((trip) => trip.id))
+  await Promise.all(
+    nextData.trips
+      .filter((trip) => !previousTripIds.has(trip.id))
+      .map((trip) => ensureOwnerMembership(userId, trip.id)),
   )
 }

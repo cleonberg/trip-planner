@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 import TripMap from './TripMap.jsx'
 import LifetimeOverview from './LifetimeOverview.jsx'
@@ -10,7 +10,16 @@ import DurationInput from './DurationInput.jsx'
 import { initialAnnualPlans, initialTrips, initialWishlist } from './plannerData.js'
 import { searchForPlaces } from './places.js'
 import { auth } from './firebase.js'
-import { loadPlannerData, savePlannerData } from './plannerStore.js'
+import {
+  loadPlannerData,
+  loadSharedTrip,
+  loadSharedTrips,
+  savePlannerData,
+  saveSharedTrip,
+} from './plannerStore.js'
+import SharedTripsView from './SharedTripsView.jsx'
+import TripInviteAcceptance from './TripInviteAcceptance.jsx'
+import TripShareDialog from './TripShareDialog.jsx'
 import './App.css'
 import './Auth.css'
 
@@ -130,13 +139,27 @@ function importLegacyYosemiteActivities(trips, days) {
   })
 }
 
-function PlannerApp({ user }) {
-  const [currentView, setCurrentView] = useState('lifetime')
+function getSharedTripData(trip) {
+  return Object.fromEntries(
+    Object.entries(trip).filter(([key]) => key !== 'id' && key !== 'sharedRole'),
+  )
+}
+
+function PlannerApp({ user, initialView = 'lifetime' }) {
+  const [currentView, setCurrentView] = useState(initialView)
   const [wishlistFocusItemId, setWishlistFocusItemId] = useState('')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [tripViewMode, setTripViewMode] = useState('days')
   const [selectedTripId, setSelectedTripId] = useState(initialTrips[0]?.id ?? '')
   const [trips, setTrips] = useState(initialTrips)
+  const [sharedTrips, setSharedTrips] = useState([])
+  const [isLoadingSharedTrips, setIsLoadingSharedTrips] = useState(true)
+  const [sharedTripsError, setSharedTripsError] = useState('')
+  const [selectedSharedTrip, setSelectedSharedTrip] = useState(null)
+  const [sharedTrip, setSharedTrip] = useState(null)
+  const [sharedTripLoadState, setSharedTripLoadState] = useState('idle')
+  const [sharedTripLoadAttempt, setSharedTripLoadAttempt] = useState(0)
+  const [sharedTripError, setSharedTripError] = useState('')
   const [annualPlans, setAnnualPlans] = useState(initialAnnualPlans)
   const [wishlistItems, setWishlistItems] = useState(initialWishlist)
   const [days, setDays] = useState([])
@@ -163,6 +186,8 @@ function PlannerApp({ user }) {
   const activityIdCounter = useRef(0)
   const saveQueue = useRef(Promise.resolve())
   const savedPlannerData = useRef(null)
+  const savedSharedTrip = useRef('')
+  const sharedSaveQueue = useRef(Promise.resolve())
   const [activityDraft, setActivityDraft] = useState({
     time: '',
     title: '',
@@ -177,11 +202,24 @@ function PlannerApp({ user }) {
   useEffect(() => {
     let active = true
 
-    loadPlannerData(user.uid)
-      .then((data) => {
+    const sharedTripsRequest = loadSharedTrips(user.uid)
+      .then((memberships) => ({ memberships }))
+      .catch((error) => ({ error }))
+
+    Promise.all([loadPlannerData(user.uid), sharedTripsRequest])
+      .then(([data, sharedTripsResult]) => {
         if (!active) return
         savedPlannerData.current = data
         setTrips(importLegacyYosemiteActivities(data.trips, data.days))
+        if (sharedTripsResult.error) {
+          console.error('Unable to load shared trip list.', sharedTripsResult.error)
+          setSharedTripsError(sharedTripsResult.error.message)
+          setSharedTrips([])
+        } else {
+          setSharedTrips(sharedTripsResult.memberships)
+          setSharedTripsError('')
+        }
+        setIsLoadingSharedTrips(false)
         setAnnualPlans(data.annualPlans)
         setWishlistItems(data.wishlistItems)
         setDays(data.days)
@@ -191,6 +229,7 @@ function PlannerApp({ user }) {
       })
       .catch((error) => {
         if (!active) return
+        setIsLoadingSharedTrips(false)
         console.error('Unable to load planner data from Firestore.', error)
         setPlannerError(error.message)
         setPlannerLoadState('error')
@@ -200,6 +239,31 @@ function PlannerApp({ user }) {
       active = false
     }
   }, [user.uid, loadAttempt])
+
+  useEffect(() => {
+    let active = true
+    if (currentView !== 'shared-trip' || !selectedSharedTrip) return undefined
+
+    loadSharedTrip(selectedSharedTrip.ownerUid, selectedSharedTrip.tripId)
+      .then(({ trip, days: sharedDays }) => {
+        if (!active) return
+        const importedTrip = importLegacyYosemiteActivities([trip], sharedDays)[0]
+        const nextTrip = { ...importedTrip, sharedRole: selectedSharedTrip.role }
+        savedSharedTrip.current = JSON.stringify(getSharedTripData(nextTrip))
+        setSharedTrip(nextTrip)
+        setSharedTripLoadState('ready')
+      })
+      .catch((error) => {
+        if (!active) return
+        console.error('Unable to load shared trip.', error)
+        setSharedTripError(error.message)
+        setSharedTripLoadState('error')
+      })
+
+    return () => {
+      active = false
+    }
+  }, [currentView, selectedSharedTrip, sharedTripLoadAttempt])
 
   useEffect(() => {
     if (plannerLoadState !== 'ready') return undefined
@@ -235,6 +299,44 @@ function PlannerApp({ user }) {
       clearTimeout(timeout)
     }
   }, [user.uid, plannerLoadState, trips, annualPlans, wishlistItems, days, saveAttempt])
+
+  useEffect(() => {
+    if (sharedTripLoadState !== 'ready'
+      || !selectedSharedTrip || selectedSharedTrip.role !== 'editor' || !sharedTrip) return undefined
+
+    const nextData = getSharedTripData(sharedTrip)
+    const serialized = JSON.stringify(nextData)
+    if (serialized === savedSharedTrip.current) return undefined
+
+    let active = true
+    const timeout = setTimeout(() => {
+      setSaveState('saving')
+      setSaveError('')
+      const pendingSave = sharedSaveQueue.current
+        .catch(() => {})
+        .then(async () => {
+          await saveSharedTrip(selectedSharedTrip.ownerUid, selectedSharedTrip.tripId, sharedTrip)
+          savedSharedTrip.current = serialized
+        })
+      sharedSaveQueue.current = pendingSave
+
+      pendingSave
+        .then(() => {
+          if (active) setSaveState('saved')
+        })
+        .catch((error) => {
+          if (!active) return
+          console.error('Unable to save shared trip.', error)
+          setSaveError(error.message)
+          setSaveState('error')
+        })
+    }, 500)
+
+    return () => {
+      active = false
+      clearTimeout(timeout)
+    }
+  }, [saveAttempt, selectedSharedTrip, sharedTrip, sharedTripLoadState])
 
   const selectedTrip = trips.find((trip) => trip.id === selectedTripId) ?? trips[0]
   const minimumTripDays = Math.max(
@@ -420,6 +522,57 @@ function PlannerApp({ user }) {
     setSelectedTripId(trip.id)
     setCurrentView('trip')
     setIsMobileMenuOpen(false)
+  }
+
+  async function openSharedTrip(membership) {
+    if (sharedTrip && selectedSharedTrip?.role === 'editor') {
+      const currentData = JSON.stringify(getSharedTripData(sharedTrip))
+      if (currentData !== savedSharedTrip.current) {
+        try {
+          await sharedSaveQueue.current.catch(() => {})
+          await saveSharedTrip(selectedSharedTrip.ownerUid, selectedSharedTrip.tripId, sharedTrip)
+          savedSharedTrip.current = currentData
+        } catch (error) {
+          console.error('Unable to save shared trip before switching.', error)
+          setSaveError(error.message)
+          setSaveState('error')
+          return
+        }
+      }
+    }
+    setSelectedSharedTrip(membership)
+    setSharedTrip(null)
+    setSharedTripError('')
+    setSharedTripLoadState('loading')
+    savedSharedTrip.current = ''
+    setCurrentView('shared-trip')
+    setIsMobileMenuOpen(false)
+  }
+
+  function saveSharedTripActivities(tripId, activitiesToSave) {
+    const timestamp = Date.now()
+    setSharedTrip((currentTrip) => {
+      if (!currentTrip || currentTrip.id !== tripId) return currentTrip
+      let activities = currentTrip.activities ?? []
+      activitiesToSave.forEach((activity, index) => {
+        const nextActivity = {
+          ...activity,
+          id: activity.id ?? `${tripId}-activity-${timestamp}-${index}`,
+        }
+        activities = activity.id
+          ? activities.map((existing) => existing.id === nextActivity.id ? nextActivity : existing)
+          : [...activities, nextActivity]
+      })
+      return { ...currentTrip, activities }
+    })
+  }
+
+  function removeSharedTripActivity(tripId, activityId) {
+    setSharedTrip((currentTrip) => (
+      currentTrip?.id === tripId
+        ? { ...currentTrip, activities: (currentTrip.activities ?? []).filter((activity) => activity.id !== activityId) }
+        : currentTrip
+    ))
   }
 
   function openWishlistItem(itemId) {
@@ -783,7 +936,14 @@ function PlannerApp({ user }) {
     setSaveState('saving')
     setSaveError('')
     try {
-      await saveQueue.current.catch(() => {})
+      await Promise.all([
+        saveQueue.current.catch(() => {}),
+        sharedSaveQueue.current.catch(() => {}),
+      ])
+      if (sharedTrip && selectedSharedTrip?.role === 'editor') {
+        await saveSharedTrip(selectedSharedTrip.ownerUid, selectedSharedTrip.tripId, sharedTrip)
+        savedSharedTrip.current = JSON.stringify(getSharedTripData(sharedTrip))
+      }
       const data = { trips, annualPlans, wishlistItems, days }
       if (!savedPlannerData.current) throw new Error('Planner data has not finished loading.')
       await savePlannerData(user.uid, savedPlannerData.current, data)
@@ -820,6 +980,8 @@ function PlannerApp({ user }) {
             type="button"
             onClick={() => {
               setPlannerError('')
+              setIsLoadingSharedTrips(true)
+              setSharedTripsError('')
               setPlannerLoadState('loading')
               setLoadAttempt((attempt) => attempt + 1)
             }}
@@ -864,7 +1026,12 @@ function PlannerApp({ user }) {
           }}>
             <span>✦</span> Wish list
           </button>
-          <div className="nav-item upcoming-nav" aria-disabled="true"><span>♧</span> Shared trips · soon</div>
+          <button className={`nav-item${currentView === 'shared' || currentView === 'shared-trip' ? ' active' : ''}`} type="button" onClick={() => {
+            setCurrentView('shared')
+            setIsMobileMenuOpen(false)
+          }}>
+            <span>♧</span> Shared trips{sharedTrips.length > 0 ? ` · ${sharedTrips.length}` : ''}
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-avatar">C</div>
@@ -876,14 +1043,24 @@ function PlannerApp({ user }) {
       <main className="main-content" id="itinerary">
         <header className="topbar">
           <div className="breadcrumb">
-            {currentView === 'lifetime'
+              {currentView === 'lifetime'
               ? <span>My trips</span>
               : <button className="breadcrumb-link" type="button" onClick={() => {
-                setCurrentView('lifetime')
+                  setCurrentView(currentView === 'shared-trip' ? 'shared' : 'lifetime')
                 setIsMobileMenuOpen(false)
-              }}>My trips</button>}
+                }}>{currentView === 'shared' || currentView === 'shared-trip' ? 'Shared trips' : 'My trips'}</button>}
             <span className="crumb-slash" aria-hidden="true">/</span>
-            <strong aria-current="page">{currentView === 'lifetime' ? 'Lifetime overview' : currentView === 'wishlist' ? 'Wish list' : selectedTrip.name}</strong>
+              <strong aria-current="page">
+                {currentView === 'lifetime'
+                  ? 'Lifetime overview'
+                  : currentView === 'wishlist'
+                    ? 'Wish list'
+                    : currentView === 'shared'
+                      ? 'Shared trips'
+                      : currentView === 'shared-trip'
+                        ? sharedTrip?.name ?? 'Shared trip'
+                        : selectedTrip?.name ?? 'Trip'}
+              </strong>
           </div>
           <div className="topbar-actions">
             {saveError
@@ -933,6 +1110,15 @@ function PlannerApp({ user }) {
           />
         )}
 
+        {currentView === 'shared' && (
+          <SharedTripsView
+            trips={sharedTrips}
+            isLoading={isLoadingSharedTrips}
+            error={sharedTripsError}
+            onOpen={openSharedTrip}
+          />
+        )}
+
         {currentView === 'trip' && selectedTrip && (
           <TripPreview
             key={selectedTrip.id}
@@ -948,6 +1134,46 @@ function PlannerApp({ user }) {
             onRemoveActivity={removeTripActivity}
             onUpdateItem={updateWishlistItem}
             onUpdateTrip={updateTripDetails}
+            canShare
+            onShareTrip={() => setIsShareInfoOpen(true)}
+          />
+        )}
+
+        {currentView === 'shared-trip' && sharedTripLoadState === 'loading' && (
+          <div className="page-wrap shared-trip-status"><p>Loading shared trip…</p></div>
+        )}
+        {currentView === 'shared-trip' && sharedTripLoadState === 'error' && (
+          <div className="page-wrap shared-trip-status">
+            <h1>Couldn’t load shared trip</h1>
+            <p role="alert">{sharedTripError}</p>
+            <button className="primary-button" type="button" onClick={() => {
+              setSharedTripError('')
+              setSharedTripLoadState('loading')
+              setSharedTripLoadAttempt((attempt) => attempt + 1)
+            }}>Try again</button>
+            <button className="text-button" type="button" onClick={() => setCurrentView('shared')}>Back to shared trips</button>
+          </div>
+        )}
+        {currentView === 'shared-trip' && sharedTripLoadState === 'ready' && sharedTrip && (
+          <TripPreview
+            key={`shared-${selectedSharedTrip.ownerUid}-${selectedSharedTrip.tripId}`}
+            trip={sharedTrip}
+            minTripDays={Math.max(1, ...(sharedTrip.activities ?? []).map((activity) => activity.dayNumber ?? 1))}
+            wishlist={[]}
+            trips={[sharedTrip]}
+            onBack={() => setCurrentView('shared')}
+            onOpenWishlistItem={() => {}}
+            onScheduleItem={() => {}}
+            onSaveActivity={saveSharedTripActivities}
+            onSaveActivities={saveSharedTripActivities}
+            onRemoveActivity={removeSharedTripActivity}
+            onUpdateItem={() => {}}
+            onUpdateTrip={(updatedTrip) => setSharedTrip((currentTrip) => (
+              currentTrip ? { ...currentTrip, ...updatedTrip } : currentTrip
+            ))}
+            canEdit={selectedSharedTrip.role === 'editor'}
+            showWishlist={false}
+            backLabel="Back to shared trips"
           />
         )}
 
@@ -1192,17 +1418,12 @@ function PlannerApp({ user }) {
         )}
       </main>
 
-      {isShareInfoOpen && (
-        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsShareInfoOpen(false) }}>
-          <section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title">
-            <button className="close-form dialog-close" type="button" aria-label="Close" onClick={() => setIsShareInfoOpen(false)}>×</button>
-            <div className="share-dialog-icon">↗</div>
-            <h2 id="share-title">Share this trip</h2>
-            <p>View-only sharing is the plan. Shareable links will be available once trip storage and hosting are connected.</p>
-            <div className="share-preview"><span>{selectedTrip.name}</span><strong>View-only link coming soon</strong></div>
-            <button className="save-button dialog-done" type="button" onClick={() => setIsShareInfoOpen(false)}>Got it</button>
-          </section>
-        </div>
+      {isShareInfoOpen && selectedTrip && (
+        <TripShareDialog
+          user={user}
+          trip={selectedTrip}
+          onClose={() => setIsShareInfoOpen(false)}
+        />
       )}
 
       {isMapPickerOpen && (
@@ -1231,11 +1452,24 @@ function PlannerApp({ user }) {
   )
 }
 
+function getInviteFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const invite = {
+    ownerUid: params.get('inviteOwner') ?? '',
+    tripId: params.get('inviteTrip') ?? '',
+    inviteId: params.get('inviteId') ?? '',
+    token: params.get('inviteToken') ?? '',
+  }
+  return Object.values(invite).some(Boolean) ? invite : null
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [invite, setInvite] = useState(getInviteFromUrl)
+  const [openSharedTripsAfterInvite, setOpenSharedTripsAfterInvite] = useState(false)
 
   useEffect(() => onAuthStateChanged(
     auth,
@@ -1263,6 +1497,12 @@ function App() {
     }
   }
 
+  const handleInviteAccepted = useCallback(() => {
+    setInvite(null)
+    setOpenSharedTripsAfterInvite(true)
+  }, [])
+  const handleContinueToPlanner = useCallback(() => setInvite(null), [])
+
   if (isCheckingAuth) {
     return (
       <main className="firebase-gate">
@@ -1282,8 +1522,10 @@ function App() {
             <span className="brand-mark">w</span>
             <span>wayfare</span>
           </div>
-          <h1>Your trips, saved privately</h1>
-          <p>Sign in with the Google account you use for your travel planner.</p>
+          <h1>{invite ? 'Sign in to join a shared trip' : 'Your trips, saved privately'}</h1>
+          <p>{invite
+            ? 'Use the Google account that received this invitation. The owner will only share this trip.'
+            : 'Sign in with the Google account you use for your travel planner.'}</p>
           {authError && <p className="firebase-gate-error" role="alert">{authError}</p>}
           <button className="primary-button" type="button" disabled={isSigningIn} onClick={handleGoogleSignIn}>
             {isSigningIn ? 'Opening Google sign-in…' : 'Continue with Google'}
@@ -1293,7 +1535,18 @@ function App() {
     )
   }
 
-  return <PlannerApp key={user.uid} user={user} />
+  if (invite) {
+    return (
+      <TripInviteAcceptance
+        user={user}
+        invite={invite}
+        onAccepted={handleInviteAccepted}
+        onContinue={handleContinueToPlanner}
+      />
+    )
+  }
+
+  return <PlannerApp key={user.uid} user={user} initialView={openSharedTripsAfterInvite ? 'shared' : 'lifetime'} />
 }
 
 export default App

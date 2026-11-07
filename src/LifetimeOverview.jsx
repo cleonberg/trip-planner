@@ -10,6 +10,26 @@ function getYearPlan(annualPlans, year) {
   return annualPlans.find((plan) => plan.year === year) ?? { year, travelBudget: 0, vacationDays: 0 }
 }
 
+function getTripDestinations(trip) {
+  const stops = Array.isArray(trip.stops) ? trip.stops.filter((stop) => stop.name?.trim()) : []
+  return stops.length ? stops.map((stop) => stop.name) : [trip.location].filter(Boolean)
+}
+
+function getTripCountries(trip) {
+  const stops = Array.isArray(trip.stops) ? trip.stops.filter((stop) => stop.details?.trim()) : []
+  const locations = stops.map((stop) => stop.details)
+  if (!locations.length && (trip.locationDetails || trip.location)) {
+    locations.push(trip.locationDetails || trip.location)
+  }
+  return locations
+    .map((location) => location.split(',').map((part) => part.trim()).filter(Boolean).at(-1))
+    .filter(Boolean)
+}
+
+function countUniqueTripValues(trips, getValues) {
+  return new Set(trips.flatMap(getValues).map((value) => value.trim().toLowerCase()).filter(Boolean)).size
+}
+
 function LimitMeter({ label, actual, limit, format }) {
   const percentage = limit > 0 ? (actual / limit) * 100 : actual > 0 ? 100 : 0
   const overLimit = actual > limit
@@ -242,7 +262,14 @@ function LifetimeOverview({
     })),
   ], [trips, wishlist])
   const visibleMarkers = markers.filter((marker) => mapFilters[marker.mapCategory])
-  const totalPto = trips.reduce((sum, trip) => sum + trip.vacationDays, 0)
+  const visitedTrips = trips.filter((trip) => trip.status?.toLowerCase() === 'visited')
+  const plannedTrips = trips.filter((trip) => trip.status?.toLowerCase() !== 'visited')
+  const visitedWishlistCount = wishlist.filter((item) => item.status?.toLowerCase() === 'visited').length
+  const leftWishlistCount = wishlist.length - visitedWishlistCount
+  const visitedDestinationCount = countUniqueTripValues(visitedTrips, getTripDestinations)
+  const plannedDestinationCount = countUniqueTripValues(plannedTrips, getTripDestinations)
+  const visitedCountryCount = countUniqueTripValues(visitedTrips, getTripCountries)
+  const plannedCountryCount = countUniqueTripValues(plannedTrips, getTripCountries)
   const totalCost = trips.reduce((sum, trip) => sum + trip.estimatedCost, 0)
   const locationCount = markers.length
 
@@ -264,33 +291,24 @@ function LifetimeOverview({
 
   return (
     <main className="lifetime-page">
-      <section className="lifetime-hero">
-        <div>
-          <p className="eyebrow">The long view</p>
-          <h1>Make a lifetime of trips add up.</h1>
-          <p>Record the places you’ve been and plan the adventures still ahead, all in one lifetime view.</p>
-        </div>
-        <button className="primary-button" type="button" onClick={() => setIsAddingTrip((open) => !open)}>
-          {isAddingTrip ? 'Close form' : '+ Add a trip'}
-        </button>
-      </section>
-
       <section className="lifetime-stat-grid" aria-label="Lifetime travel summary">
-        <article className="lifetime-stat-card"><span>Trips recorded</span><strong>{trips.length}</strong><small>across past and future years</small></article>
-        <article className="lifetime-stat-card"><span>Wish-list ideas</span><strong>{wishlist.length}</strong><small>ready to fit into a trip</small></article>
-        <article className="lifetime-stat-card"><span>Vacation days planned</span><strong>{totalPto}</strong><small>days across all trips</small></article>
+        <article className="lifetime-stat-card">
+          <span>Trips taken / planned</span>
+          <strong>{visitedTrips.length} / {plannedTrips.length}</strong>
+          <small>{visitedDestinationCount} / {plannedDestinationCount} destinations</small>
+        </article>
+        <article className="lifetime-stat-card">
+          <span>Wish-list ideas</span>
+          <strong>{visitedWishlistCount} / {leftWishlistCount}</strong>
+          <small>visited / left</small>
+        </article>
+        <article className="lifetime-stat-card">
+          <span>Countries visited / planned</span>
+          <strong>{visitedCountryCount} / {plannedCountryCount}</strong>
+          <small>unique countries</small>
+        </article>
         <article className="lifetime-stat-card"><span>Trip estimates</span><strong>{currency.format(totalCost)}</strong><small>rough planning totals</small></article>
       </section>
-
-      {isAddingTrip && (
-        <TripForm
-          onCancel={() => setIsAddingTrip(false)}
-          onAddTrip={(trip) => {
-            onAddTrip(trip)
-            setIsAddingTrip(false)
-          }}
-        />
-      )}
 
       <section className="lifetime-map-panel">
         <div className="section-heading">
@@ -327,6 +345,9 @@ function LifetimeOverview({
             <h2>Trips by year</h2>
           </div>
           <div className="year-planner-controls">
+            <button className="primary-button" type="button" onClick={() => setIsAddingTrip((open) => !open)}>
+              {isAddingTrip ? 'Close form' : '+ Add a trip'}
+            </button>
             {previousYears.length > 0 && (
               <button
                 className="previous-years-toggle"
@@ -342,6 +363,15 @@ function LifetimeOverview({
             )}
           </div>
         </div>
+        {isAddingTrip && (
+          <TripForm
+            onCancel={() => setIsAddingTrip(false)}
+            onAddTrip={(trip) => {
+              onAddTrip(trip)
+              setIsAddingTrip(false)
+            }}
+          />
+        )}
         <div className="year-board" id="year-board">
           {visibleYears.map((year) => {
             const yearTrips = trips.filter((trip) => trip.year === year)

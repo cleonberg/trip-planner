@@ -1,5 +1,6 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
+import { getFunctions } from 'firebase/functions'
 import { getFirestore } from 'firebase/firestore'
 
 // Your web app's Firebase configuration
@@ -24,3 +25,4 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const functions = getFunctions(app, 'us-central1')

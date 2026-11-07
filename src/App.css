@@ -1491,19 +1491,6 @@
   padding: 43px clamp(20px, 4vw, 58px) 55px;
 }
 
-.lifetime-hero {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 27px;
-}
-
-.lifetime-hero > div {
-  max-width: 690px;
-}
-
-.lifetime-hero .eyebrow,
 .trip-preview-hero .eyebrow {
   margin: 0 0 11px;
   color: #76917d;
@@ -1513,7 +1500,6 @@
   text-transform: uppercase;
 }
 
-.lifetime-hero h1,
 .trip-preview-hero h1 {
   margin: 0;
   color: #30483a;
@@ -1795,9 +1781,9 @@
 }
 
 .year-planner-controls {
-  display: grid;
-  justify-items: end;
-  gap: 7px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .year-planner-controls > p {
@@ -2942,16 +2928,6 @@
     padding: 27px 18px 40px;
   }
 
-  .lifetime-hero {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 15px;
-  }
-
-  .lifetime-hero .primary-button {
-    align-self: flex-start;
-  }
-
   .lifetime-map-panel,
   .wishlist-map-panel,
   .trip-create-form,
@@ -3363,4 +3339,158 @@
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.share-dialog {
+  width: min(560px, 100%);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+}
+
+.trip-invite-form,
+.trip-invite-link {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.trip-invite-form .form-field input,
+.trip-invite-form .form-field select,
+.trip-invite-link .form-field input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.trip-invite-link {
+  padding: 12px;
+  border: 1px solid #dfe8df;
+  border-radius: 8px;
+  background: #f7faf7;
+}
+
+.trip-invite-link button {
+  width: 100%;
+}
+
+.trip-invite-error {
+  color: #a33232;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trip-access-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e8ede8;
+}
+
+.trip-access-list h3 {
+  margin: 0;
+  color: #30473a;
+  font-size: 13px;
+}
+
+.trip-access-list > p {
+  margin: 0;
+  color: #748078;
+  font-size: 11px;
+}
+
+.trip-access-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid #e8ede8;
+  border-radius: 7px;
+  color: #56655a;
+  font-size: 11px;
+}
+
+.trip-access-row > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.trip-access-row strong {
+  color: #315a49;
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.shared-trips-page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 43px clamp(20px, 4vw, 58px) 55px;
+}
+
+.shared-trips-page > .section-heading {
+  display: grid;
+  margin-bottom: 24px;
+}
+
+.shared-trips-page h1,
+.shared-trip-status h1 {
+  margin: 0;
+  color: #30483a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(31px, 4vw, 47px);
+  font-weight: 500;
+}
+
+.shared-trips-page > .section-heading > div > p:last-child {
+  color: #78847b;
+  font-size: 12px;
+}
+
+.shared-trips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.shared-trip-card {
+  display: grid;
+  gap: 10px;
+  padding: 17px;
+  border: 1px solid #e8ece7;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.shared-trip-card h2,
+.shared-trip-card p {
+  margin: 0;
+}
+
+.shared-trip-card h2 {
+  color: #30483a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.shared-trip-card p,
+.shared-trips-empty,
+.shared-trip-status > p {
+  color: #78847b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.shared-trip-card .text-button {
+  justify-self: start;
+}
+
+.shared-trip-status {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+
+.invite-actions {
+  display: grid;
+  gap: 9px;
 }

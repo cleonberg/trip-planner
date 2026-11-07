@@ -75,7 +75,25 @@ function getTravelPlacement(connection, placement) {
   return placement ?? connection.defaultPlacement
 }
 
-function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlistItem, onScheduleItem, onSaveActivity, onSaveActivities, onRemoveActivity, onUpdateItem, onUpdateTrip }) {
+function TripPreview({
+  trip,
+  minTripDays,
+  wishlist,
+  trips,
+  onBack,
+  onOpenWishlistItem,
+  onScheduleItem,
+  onSaveActivity,
+  onSaveActivities,
+  onRemoveActivity,
+  onUpdateItem,
+  onUpdateTrip,
+  onShareTrip,
+  canEdit = true,
+  canShare = false,
+  showWishlist = true,
+  backLabel = 'Back to lifetime overview',
+}) {
   const [schedulingItemId, setSchedulingItemId] = useState(null)
   const [scheduleView, setScheduleView] = useState('calendar')
   const [isEditingDetails, setIsEditingDetails] = useState(false)
@@ -657,12 +675,17 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   }
 
   function allowScheduleEventDrop(dropInfo, draggedEvent) {
+    if (!canEdit) return false
     if (!dropInfo.start || !draggedEvent.start || !draggedEvent.end) return false
     const end = dropInfo.end ?? new Date(dropInfo.start.getTime() + draggedEvent.end.getTime() - draggedEvent.start.getTime())
     return isScheduleEventAllowed(dropInfo.start, end, draggedEvent)
   }
 
   function updateScheduledTime({ event, revert }) {
+    if (!canEdit) {
+      revert()
+      return
+    }
     if (!event.start || !event.end) {
       revert()
       return
@@ -696,6 +719,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
 
   function handleScheduleEventClick(info) {
     info.jsEvent.preventDefault()
+    if (!canEdit) return
     if (info.event.extendedProps.kind === 'travel') {
       setActiveTravelConnectionId(info.event.id)
       return
@@ -716,26 +740,35 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
 
   return (
     <main className="trip-preview-page">
-      <button className="text-button back-to-overview" type="button" onClick={onBack}>← Back to lifetime overview</button>
+      <button className="text-button back-to-overview" type="button" onClick={onBack}>← {backLabel}</button>
       <section className="trip-preview-hero">
         <div className="trip-preview-hero-heading">
           <div>
-            <p className="eyebrow">{trip.year} · {trip.status}</p>
+            <p className="eyebrow">{trip.year} · {trip.status}{trip.sharedRole ? ` · ${trip.sharedRole}` : ''}</p>
             <h1>{trip.name}</h1>
           </div>
           <div className="trip-preview-hero-actions">
-            <button
-              className={`secondary-button trip-wishlist-toggle ${tripExperiences.length ? 'has-items' : ''}`}
-              type="button"
-              aria-expanded={isWishListPanelOpen}
-              aria-controls="trip-wishlist-panel"
-              onClick={() => setIsWishListPanelOpen((isOpen) => !isOpen)}
-            >
-              Trip wish list <span className="trip-wishlist-count">{tripExperiences.length}</span>
-            </button>
-            <button className="secondary-button" type="button" onClick={() => setIsEditingDetails((isEditing) => !isEditing)}>
-              {isEditingDetails ? 'Close editor' : 'Edit trip details'}
-            </button>
+            {showWishlist && (
+              <button
+                className={`secondary-button trip-wishlist-toggle ${tripExperiences.length ? 'has-items' : ''}`}
+                type="button"
+                aria-expanded={isWishListPanelOpen}
+                aria-controls="trip-wishlist-panel"
+                onClick={() => setIsWishListPanelOpen((isOpen) => !isOpen)}
+              >
+                Trip wish list <span className="trip-wishlist-count">{tripExperiences.length}</span>
+              </button>
+            )}
+            {canEdit && (
+              <button className="secondary-button" type="button" onClick={() => setIsEditingDetails((isEditing) => !isEditing)}>
+                {isEditingDetails ? 'Close editor' : 'Edit trip details'}
+              </button>
+            )}
+            {canShare && (
+              <button className="primary-button" type="button" onClick={onShareTrip}>
+                Share trip
+              </button>
+            )}
           </div>
         </div>
         <p>{trip.location}{trip.locationDetails ? ` · ${trip.locationDetails}` : ''}</p>
@@ -750,7 +783,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
         </div>
       </section>
 
-      {isEditingDetails && (
+      {canEdit && isEditingDetails && (
         <TripDetailsForm
           trip={trip}
           minTripDays={minTripDays}
@@ -762,7 +795,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
         />
       )}
 
-      <section
+      {showWishlist && <section
         id="trip-wishlist-panel"
         className="trip-preview-experiences trip-wishlist-panel"
         aria-label="Trip wish list"
@@ -856,7 +889,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
               ? 'All ideas assigned to this trip are scheduled.'
               : 'No ideas are assigned to this trip yet. Add or assign one from the wish list.'}
           </p>}
-      </section>
+      </section>}
 
       <section className="trip-preview-experiences trip-map-browser">
         <div className="section-heading">
@@ -910,12 +943,14 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
           <div><p className="eyebrow">Day-by-day plan</p><h2>Trip schedule</h2></div>
           <div className="trip-ideas-heading-actions">
             <span>{scheduledEntries.length} {scheduledEntries.length === 1 ? 'scheduled item' : 'scheduled items'}</span>
-            <button className="secondary-button" type="button" onClick={() => {
-              setIsAddingActivity((isOpen) => !isOpen)
-              setEditingActivityId(null)
-            }}>
-              {isAddingActivity ? 'Close form' : '+ Add activity'}
-            </button>
+            {canEdit && (
+              <button className="secondary-button" type="button" onClick={() => {
+                setIsAddingActivity((isOpen) => !isOpen)
+                setEditingActivityId(null)
+              }}>
+                {isAddingActivity ? 'Close form' : '+ Add activity'}
+              </button>
+            )}
           </div>
         </div>
         <div className="trip-preview-schedule-tabs" role="tablist" aria-label="Trip schedule format">
@@ -927,7 +962,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
             <p className="trip-travel-note">
               Travel estimates shorter than 30 minutes reserve a 30-minute block. Choose whether it follows the previous activity or ends before the next. Click a block to edit it. Driving estimates use mapped road routes; enter walking minutes manually.
             </p>
-            {travelConnections.length > 0 && (
+            {canEdit && travelConnections.length > 0 && (
               <div className="trip-travel-settings">
                 <button
                   className="secondary-button"
@@ -1045,7 +1080,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
           <p className="trip-travel-warning" role="status">{travelTimeWarning}</p>
         )}
         {scheduledEntries.length === 0 && <p className="trip-preview-schedule-empty">Nothing is scheduled yet. Add a trip activity or schedule an assigned idea below.</p>}
-        {(isAddingActivity || editingActivity) && (
+        {canEdit && (isAddingActivity || editingActivity) && (
           <TripActivityForm
             key={editingActivity?.id ?? 'new'}
             activity={editingActivity}
@@ -1072,7 +1107,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
                 key={`${calendarDays[0]?.dateISO}-${calendarDays.length}`}
                 days={calendarDays}
                 events={allCalendarEvents}
-                eventAllow={allowScheduleEventDrop}
+                eventAllow={canEdit ? allowScheduleEventDrop : () => false}
                 dayLabelsOnly
                 onEventDrop={updateScheduledTime}
                 onEventResize={updateScheduledTime}

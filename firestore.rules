@@ -1,0 +1,87 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function tripMemberPath(userId, tripId, memberId) {
+      return /databases/$(database)/documents/users/$(userId)/trips/$(tripId)/members/$(memberId);
+    }
+
+    function canReadTrip(userId, tripId) {
+      return signedIn()
+        && (request.auth.uid == userId
+          || (exists(tripMemberPath(userId, tripId, request.auth.uid))
+            && get(tripMemberPath(userId, tripId, request.auth.uid)).data.role in ['viewer', 'editor']));
+    }
+
+    function canEditTrip(userId, tripId) {
+      return signedIn()
+        && (request.auth.uid == userId
+          || (exists(tripMemberPath(userId, tripId, request.auth.uid))
+            && get(tripMemberPath(userId, tripId, request.auth.uid)).data.role == 'editor'));
+    }
+
+    match /users/{userId}/campaigns/{campaignId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/legs/{legId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/accounts/{accountId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/cashTransactions/{transactionId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/accountSnapshots/{snapshotId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/trips/{tripId} {
+      allow read: if canReadTrip(userId, tripId);
+      allow create, delete: if signedIn() && request.auth.uid == userId;
+      allow update: if canEditTrip(userId, tripId);
+
+      match /days/{dayId} {
+        allow read: if canReadTrip(userId, tripId);
+        allow create, update, delete: if canEditTrip(userId, tripId);
+      }
+
+      match /members/{memberId} {
+        allow read: if signedIn()
+          && (request.auth.uid == userId || request.auth.uid == memberId);
+        allow create, update: if signedIn()
+          && request.auth.uid == userId
+          && memberId == userId
+          && request.resource.data.userId == userId
+          && request.resource.data.role == 'owner';
+        allow delete: if false;
+      }
+
+      match /invites/{inviteId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow write: if false;
+      }
+    }
+
+    match /users/{userId}/sharedTrips/{membershipId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /users/{userId}/wishlistItems/{itemId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/annualPlans/{planId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+  }
+}
