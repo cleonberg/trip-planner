@@ -412,7 +412,7 @@
 .card-label {
   overflow: hidden;
   color: #929b94;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: .65px;
   text-overflow: ellipsis;
@@ -601,7 +601,7 @@
 }
 
 .trip-map .leaflet-control-attribution {
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .trip-map .leaflet-popup-content {
@@ -656,7 +656,7 @@
 
 .route-leg-stops small {
   color: #a0a9a2;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 400;
 }
 
@@ -694,7 +694,7 @@
   background: #fff;
   color: #557462;
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
 }
 
@@ -713,7 +713,7 @@
 
 .location-picker-control span {
   color: #87938a;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .calendar-container {
@@ -756,7 +756,7 @@
 
 .day-count {
   color: #919b93;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .calendar-container .fc {
@@ -1794,32 +1794,106 @@
   margin-bottom: 14px;
 }
 
-.year-planner-heading > p {
+.year-planner-controls {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.year-planner-controls > p {
   max-width: 330px;
+  margin: 0;
+  color: #929d95;
+  font-size: 9px;
+  line-height: 1.5;
   text-align: right;
+}
+
+.previous-years-toggle {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 11px;
+  border: 1px solid #cbd9ce;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(42 69 49 / 7%);
+  color: #315a49;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+
+.previous-years-toggle:hover {
+  border-color: #9eb4a2;
+  background: #f5f8f4;
+  box-shadow: 0 4px 10px rgb(42 69 49 / 10%);
+}
+
+.previous-years-toggle[aria-expanded="true"] {
+  border-color: #aabdaa;
+  background: #edf3ee;
+}
+
+.previous-years-toggle:focus-visible {
+  outline: 2px solid #73947a;
+  outline-offset: 2px;
+}
+
+.previous-years-toggle-count {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf3ee;
+  color: #4d7055;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.previous-years-toggle[aria-expanded="true"] .previous-years-toggle-count {
+  background: #dce8dd;
+}
+
+.previous-years-toggle-chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform .15s;
+}
+
+.previous-years-toggle[aria-expanded="true"] .previous-years-toggle-chevron {
+  transform: translateY(2px) rotate(225deg);
 }
 
 .year-board {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 14px;
   padding: 1px;
 }
 
 .year-column {
   display: grid;
   grid-template-areas:
-    "header trips"
+    "header header"
     "summary trips";
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 180px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
-  padding: 14px;
-  border: 1px solid #e4e9e3;
-  border-radius: 8px;
-  background: #f1f4f0;
-  transition: background .15s, border-color .15s;
+  padding: 17px;
+  border: 1px solid #e2e9e2;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fff 0%, #f8faf7 100%);
+  box-shadow: 0 3px 12px rgb(42 69 49 / 5%);
+  transition: border-color .15s, box-shadow .15s;
 }
 
 .year-column:has(.year-drop-hint) {
@@ -1829,29 +1903,31 @@
 .year-column-header {
   grid-area: header;
   display: flex;
-  align-items: center;
-  min-height: 36px;
+  align-items: baseline;
   margin: 0;
 }
 
 .year-column-header > div {
   display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 4px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
 }
 
 .year-column-header h3 {
   margin: 0;
   color: #344a3c;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 23px;
+  font-size: 27px;
   font-weight: 500;
 }
 
 .year-column-header span {
-  color: #929e95;
-  font-size: 9px;
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: #edf3ee;
+  color: #6e8372;
+  font-size: 10px;
 }
 
 .annual-limits {
@@ -1864,6 +1940,10 @@
 .year-planning-summary {
   grid-area: summary;
   min-width: 0;
+  padding: 12px;
+  border: 1px solid #e8eee8;
+  border-radius: 9px;
+  background: #f5f8f4;
 }
 
 .year-planning-summary .annual-limits {
@@ -1878,18 +1958,18 @@
   display: grid;
   gap: 5px;
   color: #859087;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 650;
 }
 
 .annual-input-wrap {
   display: flex;
-  height: 31px;
+  min-height: 34px;
   align-items: center;
   gap: 4px;
-  padding: 0 7px;
+  padding: 0 9px;
   border: 1px solid #e0e6df;
-  border-radius: 5px;
+  border-radius: 6px;
   background: #fff;
   color: #738077;
   font-size: 9px;
@@ -1919,7 +1999,7 @@
 }
 
 .limit-meter {
-  margin: 11px 0;
+  margin: 13px 0 0;
 }
 
 .limit-meter-heading {
@@ -1972,11 +2052,11 @@
 .year-trip-list {
   display: grid;
   grid-area: trips;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   align-content: start;
   align-items: start;
-  gap: 9px;
-  min-height: 70px;
+  gap: 12px;
+  min-height: 100px;
   margin: 0;
   padding: 0;
 }
@@ -1996,17 +2076,37 @@
 }
 
 .lifetime-trip-card {
+  position: relative;
   display: flex;
   width: 100%;
-  max-width: 245px;
-  height: 174px;
+  max-width: 420px;
+  min-height: 198px;
   box-sizing: border-box;
   flex-direction: column;
-  padding: 12px;
-  border: 1px solid #e3e9e2;
-  border-radius: 7px;
+  padding: 15px;
+  border: 1px solid #e0e8e0;
+  border-left: 3px solid #8eaa91;
+  border-radius: 9px;
   background: #fff;
+  box-shadow: 0 2px 8px rgb(42 69 49 / 4%);
   cursor: grab;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+
+.lifetime-trip-card:hover {
+  transform: translateY(-2px);
+  border-color: #cbd9cc;
+  box-shadow: 0 7px 18px rgb(42 69 49 / 9%);
+}
+
+.lifetime-trip-card.trip-card-planned {
+  border-left-color: #2563eb;
+  background: #f3f7ff;
+}
+
+.lifetime-trip-card.trip-card-visited {
+  border-left-color: #2e7d32;
+  background: #f1f8f2;
 }
 
 .lifetime-trip-card:active {
@@ -2025,8 +2125,8 @@
 .priority-label {
   display: inline-flex;
   align-items: center;
-  min-height: 19px;
-  padding: 0 7px;
+  min-height: 22px;
+  padding: 0 9px;
   border-radius: 20px;
   background: #edf2ed;
   color: #57705d;
@@ -2067,11 +2167,11 @@
 
 .lifetime-trip-card h3 {
   display: -webkit-box;
-  min-height: 38px;
-  max-height: 38px;
+  min-height: 42px;
+  max-height: 42px;
   overflow: hidden;
-  font-size: 15px;
-  margin: 7px 0 3px;
+  font-size: 18px;
+  margin: 10px 0 5px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -2085,7 +2185,7 @@
 
 .trip-card-location {
   display: -webkit-box;
-  height: 22px;
+  min-height: 26px;
   overflow: hidden;
   line-height: 1.35;
   -webkit-box-orient: vertical;
@@ -2110,10 +2210,10 @@
 
 .trip-year-select select {
   width: auto;
-  min-height: 25px;
-  padding: 0 5px;
+  min-height: 29px;
+  padding: 0 8px;
   color: #6d7d71;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .trip-card-stats {
@@ -2129,13 +2229,11 @@
 
 .lifetime-trip-card .trip-card-stats {
   display: grid;
-  height: 24px;
+  min-height: 38px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 3px 8px;
-  max-height: 24px;
-  overflow: hidden;
-  margin: auto 0 6px;
+  gap: 5px 8px;
+  margin: auto 0 10px;
 }
 
 .lifetime-trip-card .trip-card-stats strong {
@@ -2158,6 +2256,11 @@
   font-weight: 650;
   text-align: left;
   cursor: pointer;
+}
+
+.lifetime-trip-card .text-button {
+  padding-top: 10px;
+  border-top: 1px solid #edf1ed;
 }
 
 .text-button:hover {
@@ -2824,10 +2927,11 @@
 
   .year-column {
     grid-template-areas:
-      "header trips"
+      "header header"
       "summary trips";
     grid-template-columns: 180px minmax(0, 1fr);
     gap: 12px;
+    padding: 14px;
   }
 }
 
@@ -2873,7 +2977,11 @@
     flex-direction: column;
   }
 
-  .year-planner-heading > p {
+  .year-planner-controls {
+    justify-items: start;
+  }
+
+  .year-planner-controls > p {
     text-align: left;
   }
 
@@ -2887,6 +2995,10 @@
 
   .year-trip-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .year-planning-summary {
+    padding: 11px;
   }
 
   .lifetime-trip-card {

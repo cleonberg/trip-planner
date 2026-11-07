@@ -66,10 +66,11 @@ function AnnualPlanNumberField({ year, field, value, ariaLabel, prefix, suffix, 
 
 function TripCard({ trip, onOpen, onYearChange, onDragStart }) {
   const tripYears = [...new Set([...planningYears, trip.year])].sort((first, second) => first - second)
+  const cardClassification = trip.status?.toLowerCase() === 'visited' ? 'visited' : 'planned'
 
   return (
     <article
-      className="lifetime-trip-card"
+      className={`lifetime-trip-card trip-card-${cardClassification}`}
       draggable
       onDragStart={(event) => onDragStart(event, trip)}
       aria-label={`${trip.name}, draggable trip plan`}
@@ -185,11 +186,16 @@ function LifetimeOverview({
   onAddTrip,
 }) {
   const [isAddingTrip, setIsAddingTrip] = useState(false)
+  const [showPreviousYears, setShowPreviousYears] = useState(false)
   const [mapFilters, setMapFilters] = useState({ planned: true, visited: true, wishlist: true })
   const years = useMemo(() => [...new Set([
     ...annualPlans.map((plan) => plan.year),
     ...trips.map((trip) => trip.year),
   ])].sort((a, b) => a - b), [annualPlans, trips])
+  const previousYears = years.filter((year) => year < firstPlanningYear)
+  const visibleYears = showPreviousYears
+    ? years
+    : years.filter((year) => year >= firstPlanningYear)
   const markers = useMemo(() => [
     ...trips.flatMap((trip) => {
       const tripStatus = trip.status?.toLowerCase() === 'visited' ? 'visited' : 'planned'
@@ -318,13 +324,26 @@ function LifetimeOverview({
       <section className="year-planner-section">
         <div className="section-heading year-planner-heading">
           <div>
-            <p className="eyebrow">Time, money, and possibility</p>
             <h2>Trips by year</h2>
           </div>
-          <p>Drag a trip into another year, or use its year menu. Edit each year’s budget and PTO limits.</p>
+          <div className="year-planner-controls">
+            {previousYears.length > 0 && (
+              <button
+                className="previous-years-toggle"
+                type="button"
+                aria-expanded={showPreviousYears}
+                aria-controls="year-board"
+                onClick={() => setShowPreviousYears((visible) => !visible)}
+              >
+                <span>{showPreviousYears ? 'Hide' : 'Show'} previous years</span>
+                <span className="previous-years-toggle-count">{previousYears.length}</span>
+                <span className="previous-years-toggle-chevron" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
-        <div className="year-board">
-          {years.map((year) => {
+        <div className="year-board" id="year-board">
+          {visibleYears.map((year) => {
             const yearTrips = trips.filter((trip) => trip.year === year)
             const plan = getYearPlan(annualPlans, year)
             const plannedCost = yearTrips.reduce((sum, trip) => sum + trip.estimatedCost, 0)

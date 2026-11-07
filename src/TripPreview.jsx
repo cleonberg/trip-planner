@@ -71,8 +71,7 @@ function formatTravelDuration(minutes) {
   return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`
 }
 
-function getTravelPlacement(connection, durationMinutes, placement) {
-  if (Number.isFinite(durationMinutes) && durationMinutes <= 30) return 'before-next'
+function getTravelPlacement(connection, placement) {
   return placement ?? connection.defaultPlacement
 }
 
@@ -97,6 +96,16 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
     [trip.id, wishlist],
   )
   const tripActivities = useMemo(() => trip.activities ?? [], [trip.activities])
+  const assignedItemsCost = useMemo(
+    () => [
+      ...tripExperiences.map((item) => item.estimatedCost),
+      ...tripActivities.map((activity) => activity.cost),
+    ].reduce((total, cost) => {
+      const amount = Number(cost)
+      return total + (Number.isFinite(amount) ? amount : 0)
+    }, 0),
+    [tripActivities, tripExperiences],
+  )
   const tripMapMarkers = useMemo(() => {
     const tripStatus = trip.status?.toLowerCase() === 'visited' ? 'visited' : 'planned'
     const keyPlaceMarkers = (Array.isArray(trip.stops) ? trip.stops : [])
@@ -265,7 +274,21 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   const hasCurrentOverviewRoutes = overviewRouteResult?.key === overviewRouteKey
   const overviewRouteSegments = hasCurrentOverviewRoutes ? overviewRouteResult.segments : []
   const overviewRouteError = hasCurrentOverviewRoutes ? overviewRouteResult.error : ''
-  const isLoadingOverviewRoutes = mapView === 'overview' && !hasCurrentOverviewRoutes
+  const isLoadingOverviewRoutes = !hasCurrentOverviewRoutes
+  const overviewDrivingTime = !hasCurrentOverviewRoutes
+    ? 'Calculating…'
+    : overviewRouteError
+      ? 'Unavailable'
+      : overviewRouteResult.routeCount
+        ? formatTravelDuration(Math.ceil(overviewRouteResult.durationSeconds / 60))
+        : '—'
+  const overviewDrivingDistance = !hasCurrentOverviewRoutes
+    ? 'Calculating…'
+    : overviewRouteError
+      ? 'Unavailable'
+      : overviewRouteResult.routeCount
+        ? `${(overviewRouteResult.distanceMeters / 1609.344).toFixed(1)} mi`
+        : '—'
   const calendarEvents = useMemo(() => scheduledEntries.flatMap((item) => {
     const day = calendarDays[item.dayNumber - 1]
     if (!day) return []
@@ -293,12 +316,10 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
     const controller = new AbortController()
 
     async function estimateTravelTimes() {
-      setTravelTimeEvents([])
       setTravelTimeError('')
       setTravelTimeWarning('')
       setIsEstimatingTravelTimes(true)
       const travelEvents = []
-      let failedRoutes = 0
       let blockedRoutes = 0
       function getEntryDateTime(dayNumber, entry) {
         const day = calendarDays[dayNumber - 1]
@@ -318,6 +339,37 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
         }]
       })
 
+      const routeEstimates = await Promise.all(travelConnections.map(async (connection) => {
+        const settings = trip.travelSettings?.[connection.id] ?? {}
+        const mode = settings.mode ?? 'driving'
+        const requestedManualDuration = Number(settings.durationMinutes)
+        const hasManualDuration = settings.durationMinutes !== ''
+          && Number.isFinite(requestedManualDuration)
+          && requestedManualDuration > 0
+        if (mode !== 'driving' || hasManualDuration) return null
+
+        const from = getTravelCoordinates(connection.from, true)
+        const to = getTravelCoordinates(connection.to, false)
+        if (!isCoordinates(from) || !isCoordinates(to) || getDistanceMeters(from, to) <= 100) return null
+
+        try {
+          const leg = await getDrivingLeg(from, to, controller.signal)
+          return {
+            connectionId: connection.id,
+            durationMinutes: Math.ceil(leg.duration / 60),
+          }
+        } catch (error) {
+          if (error.name === 'AbortError') return null
+          console.error('Unable to estimate travel time between itinerary events.', error)
+          return { connectionId: connection.id, error: true }
+        }
+      }))
+      if (!active) return
+      const failedRoutes = routeEstimates.filter((estimate) => estimate?.error).length
+      const estimatesByConnectionId = new Map(routeEstimates
+        .filter((estimate) => estimate && !estimate.error)
+        .map((estimate) => [estimate.connectionId, estimate.durationMinutes]))
+
       function addTravelEvent(
         connection,
         durationMinutes,
@@ -329,7 +381,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
         const nextStart = getEntryDateTime(connection.to.dayNumber, connection.to)
         const previousStart = getEntryDateTime(connection.from.dayNumber, connection.from)
         if (!nextStart || !previousStart) return
-        const endsAtNextActivity = placement === 'before-next' || durationMinutes <= 30
+        const endsAtNextActivity = placement === 'before-next'
         let start = new Date(previousStart.getTime() + Number(connection.from.durationMinutes || 0) * 60_000)
         let end = new Date(start.getTime() + durationMinutes * 60_000)
         if (endsAtNextActivity) {
@@ -384,35 +436,26 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
           && Number.isFinite(requestedManualDuration)
           && requestedManualDuration > 0
         const manualDuration = hasManualDuration ? Math.max(30, requestedManualDuration) : 0
-        function getPlacement(durationMinutes) {
-          return getTravelPlacement(connection, durationMinutes, settings.placement)
+        function getPlacement() {
+          return getTravelPlacement(connection, settings.placement)
         }
         if (hasManualDuration) {
-          addTravelEvent(connection, manualDuration, mode, true, getPlacement(manualDuration))
+          addTravelEvent(connection, manualDuration, mode, true, getPlacement())
           continue
         }
         if (mode !== 'driving') continue
 
-        const from = getTravelCoordinates(connection.from, true)
-        const to = getTravelCoordinates(connection.to, false)
-        if (!isCoordinates(from) || !isCoordinates(to) || getDistanceMeters(from, to) <= 100) continue
-        try {
-          const leg = await getDrivingLeg(from, to, controller.signal)
-          const estimatedDurationMinutes = Math.ceil(leg.duration / 60)
-          const blockDurationMinutes = Math.max(30, estimatedDurationMinutes)
-          addTravelEvent(
-            connection,
-            blockDurationMinutes,
-            mode,
-            false,
-            getPlacement(blockDurationMinutes),
-            estimatedDurationMinutes,
-          )
-        } catch (error) {
-          if (error.name === 'AbortError') return
-          console.error('Unable to estimate travel time between itinerary events.', error)
-          failedRoutes += 1
-        }
+        const estimatedDurationMinutes = estimatesByConnectionId.get(connection.id)
+        if (!Number.isFinite(estimatedDurationMinutes)) continue
+        const blockDurationMinutes = Math.max(30, estimatedDurationMinutes)
+        addTravelEvent(
+          connection,
+          blockDurationMinutes,
+          mode,
+          false,
+          getPlacement(),
+          estimatedDurationMinutes,
+        )
       }
 
       if (!active) return
@@ -434,7 +477,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   }, [calendarDays, scheduledEntries, travelConnections, travelEstimateAttempt, trip.travelSettings])
 
   useEffect(() => {
-    if (mapView !== 'overview' || overviewRouteResult?.key === overviewRouteKey) return undefined
+    if (overviewRouteResult?.key === overviewRouteKey) return undefined
 
     let active = true
     const controller = new AbortController()
@@ -450,8 +493,14 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
 
         try {
           const route = await getDrivingRoute([from, to], controller.signal)
-          if ((route.legs[0]?.duration ?? 0) < 30 * 60) return null
-          return { type: 'driving', coordinates: route.coordinates }
+          const leg = route.legs[0]
+          return {
+            segment: leg.duration >= 30 * 60
+              ? { type: 'driving', coordinates: route.coordinates }
+              : null,
+            durationSeconds: leg.duration,
+            distanceMeters: leg.distance,
+          }
         } catch (error) {
           if (error.name === 'AbortError') return null
           console.error('Unable to load a driving route for the trip overview map.', error)
@@ -460,11 +509,15 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
       }))
 
       if (!active) return
-      const segments = results.filter((result) => result && !result.error)
+      const successfulRoutes = results.filter((result) => result && !result.error)
       const failedRoutes = results.filter((result) => result?.error).length
+      const segments = successfulRoutes.flatMap((result) => result.segment ? [result.segment] : [])
       setOverviewRouteResult({
         key: overviewRouteKey,
         segments,
+        routeCount: successfulRoutes.length,
+        durationSeconds: successfulRoutes.reduce((total, result) => total + result.durationSeconds, 0),
+        distanceMeters: successfulRoutes.reduce((total, result) => total + result.distanceMeters, 0),
         error: failedRoutes
           ? `${failedRoutes} driving route${failedRoutes === 1 ? '' : 's'} could not be shown on the overview map.`
           : '',
@@ -476,7 +529,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
       active = false
       controller.abort()
     }
-  }, [mapView, overviewRouteKey, overviewRouteResult?.key, travelConnections, trip.travelSettings])
+  }, [overviewRouteKey, overviewRouteResult?.key, travelConnections, trip.travelSettings])
 
   const unscheduledItems = tripExperiences.filter((item) => !item.schedule)
   const availableIdeas = wishlist.filter((item) => !item.tripId)
@@ -532,14 +585,8 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   const activeTravelEvent = activeTravelConnection
     ? travelTimeEvents.find((event) => event.id === activeTravelConnection.id)
     : null
-  const activeTravelDuration = activeTravelHasManualDuration
-    ? activeTravelManualDuration
-    : activeTravelEvent?.start && activeTravelEvent?.end
-      ? (activeTravelEvent.end - activeTravelEvent.start) / 60000
-      : Number.NaN
-  const activeTravelUsesMinimumBlock = Number.isFinite(activeTravelDuration) && activeTravelDuration <= 30
   const activeTravelDefaultPlacement = activeTravelConnection
-    ? getTravelPlacement(activeTravelConnection, activeTravelDuration, activeTravelSettings.placement)
+    ? getTravelPlacement(activeTravelConnection, activeTravelSettings.placement)
     : 'before-next'
   const activeTravelFrom = activeTravelConnection
     ? getTravelCoordinates(activeTravelConnection.from, true)
@@ -697,6 +744,9 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
           <article><span>Trip length</span><strong>{trip.tripDays ?? trip.days} days</strong></article>
           <article><span>Vacation time</span><strong>{trip.vacationDays} days</strong></article>
           <article><span>Estimated cost</span><strong>{currency.format(trip.estimatedCost)}</strong></article>
+          <article><span>Assigned item costs</span><strong>{currency.format(assignedItemsCost)}</strong></article>
+          <article><span>Driving time</span><strong>{overviewDrivingTime}</strong></article>
+          <article><span>Driving distance</span><strong>{overviewDrivingDistance}</strong></article>
         </div>
       </section>
 
@@ -875,7 +925,7 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
         {scheduleView === 'calendar' && (
           <>
             <p className="trip-travel-note">
-              Travel estimates shorter than 30 minutes reserve a 30-minute block ending at the next activity. Click a block to edit it. Driving estimates use mapped road routes; enter walking minutes manually.
+              Travel estimates shorter than 30 minutes reserve a 30-minute block. Choose whether it follows the previous activity or ends before the next. Click a block to edit it. Driving estimates use mapped road routes; enter walking minutes manually.
             </p>
             {travelConnections.length > 0 && (
               <div className="trip-travel-settings">
@@ -956,7 +1006,6 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
                         <select
                           aria-label={`Travel block placement from ${activeTravelFromLabel} to ${activeTravelToLabel}`}
                           value={activeTravelDefaultPlacement}
-                          disabled={activeTravelUsesMinimumBlock}
                           onChange={(event) => updateTravelSetting(activeTravelConnection, 'placement', event.target.value)}
                         >
                           <option value="after-previous">After previous activity</option>
@@ -964,8 +1013,9 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
                         </select>
                       </label>
                     </div>
-                    {activeTravelUsesMinimumBlock && (
-                      <p className="trip-travel-setting-hint">Blocks of 30 minutes or less end at the next activity.</p>
+                    {activeTravelEvent?.start && activeTravelEvent?.end
+                      && (activeTravelEvent.end - activeTravelEvent.start) / 60000 <= 30 && (
+                      <p className="trip-travel-setting-hint">Short travel blocks reserve 30 minutes; placement applies when there is enough open time.</p>
                     )}
                     {activeTravelMode === 'walking' && !activeTravelHasManualDuration && (
                       <p className="trip-travel-setting-hint">Enter walking minutes to add this block.</p>
