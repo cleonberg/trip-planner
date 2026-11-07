@@ -2,7 +2,7 @@ import { useState } from 'react'
 import PlaceSearchInput from './PlaceSearchInput.jsx'
 import DurationInput from './DurationInput.jsx'
 
-const activityTypes = ['Travel', 'Flight', 'Food', 'Stay', 'Scenic', 'Hike', 'Activity', 'Other']
+const activityTypes = ['Activity', 'Flight', 'Food', 'Hike', 'Other', 'Scenic', 'Stay', 'Travel']
 
 function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
   const [title, setTitle] = useState(activity?.title ?? '')
@@ -132,7 +132,7 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
             </>
           )
           : (
-            <label>
+            <label className="schedule-item-location-field">
               <span>Location</span>
               <PlaceSearchInput
                 ariaLabel="Activity location"

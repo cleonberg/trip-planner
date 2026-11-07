@@ -2817,6 +2817,10 @@
   gap: 9px;
 }
 
+.schedule-item-location-field {
+  grid-column: 1 / -1;
+}
+
 .schedule-item-fields label {
   display: grid;
   gap: 4px;
