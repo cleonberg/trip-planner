@@ -47,14 +47,40 @@ function TripCalendar({ days, events, eventAllow, onEventDrop, onEventResize, on
         eventDrop={onEventDrop}
         eventResize={onEventResize}
         eventClick={onEventClick}
-        eventContent={({ event, timeText }) => (
-          <div className="calendar-event-content">
-            <span className="calendar-event-time">{timeText}</span>
-            <strong>{event.title}</strong>
-            <span className="calendar-event-type">{event.extendedProps.type}</span>
-            {event.extendedProps.place && <span className="calendar-event-place">{event.extendedProps.place}</span>}
-          </div>
-        )}
+        eventDidMount={({ event, el }) => {
+          if (event.extendedProps.kind === 'travel') {
+            el.title = `${event.title} · ${event.extendedProps.type}`
+          }
+        }}
+        eventContent={({ event, timeText }) => {
+          const duration = event.end?.getTime() - event.start?.getTime()
+          const isShortEvent = Number.isFinite(duration) && duration <= 60 * 60 * 1000
+          const isShortTravel = event.extendedProps.kind === 'travel'
+            && Number.isFinite(duration)
+            && duration <= 30 * 60 * 1000
+
+          if (isShortTravel) {
+            return (
+              <div className="calendar-event-content calendar-event-content-travel-short">
+                <span className="calendar-event-time">{timeText}</span>
+                <strong>{event.extendedProps.mode} · {event.extendedProps.durationLabel}</strong>
+              </div>
+            )
+          }
+
+          return (
+            <div className={`calendar-event-content${isShortEvent ? ' calendar-event-content-compact' : ''}`}>
+              <span className="calendar-event-time">{timeText}</span>
+              <strong>{event.title}</strong>
+              {!isShortEvent && (
+                <>
+                  <span className="calendar-event-type">{event.extendedProps.type}</span>
+                  {event.extendedProps.place && <span className="calendar-event-place">{event.extendedProps.place}</span>}
+                </>
+              )}
+            </div>
+          )
+        }}
       />
     </div>
   )

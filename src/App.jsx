@@ -356,21 +356,32 @@ function PlannerApp({ user }) {
     ensureAnnualPlan(updatedTrip.year)
   }
 
-  function saveTripActivity(tripId, activity) {
-    const savedActivity = {
-      ...activity,
-      id: activity.id ?? `${tripId}-activity-${Date.now()}`,
-    }
+  function saveTripActivities(tripId, activitiesToSave) {
+    const timestamp = Date.now()
+    const savedActivities = activitiesToSave.map((activity, index) => ({
+      isNew: !activity.id,
+      activity: {
+        ...activity,
+        id: activity.id ?? `${tripId}-activity-${timestamp}-${index}`,
+      },
+    }))
     setTrips((currentTrips) => currentTrips.map((trip) => {
       if (trip.id !== tripId) return trip
-      const activities = trip.activities ?? []
+      let activities = trip.activities ?? []
+      savedActivities.forEach(({ activity, isNew }) => {
+        activities = isNew
+          ? [...activities, activity]
+          : activities.map((currentActivity) => currentActivity.id === activity.id ? activity : currentActivity)
+      })
       return {
         ...trip,
-        activities: activity.id
-          ? activities.map((currentActivity) => currentActivity.id === activity.id ? savedActivity : currentActivity)
-          : [...activities, savedActivity],
+        activities,
       }
     }))
+  }
+
+  function saveTripActivity(tripId, activity) {
+    saveTripActivities(tripId, [activity])
   }
 
   function removeTripActivity(tripId, activityId) {
@@ -933,6 +944,7 @@ function PlannerApp({ user }) {
             onOpenWishlistItem={openWishlistItem}
             onScheduleItem={scheduleWishlistItem}
             onSaveActivity={saveTripActivity}
+            onSaveActivities={saveTripActivities}
             onRemoveActivity={removeTripActivity}
             onUpdateItem={updateWishlistItem}
             onUpdateTrip={updateTripDetails}
@@ -1120,7 +1132,7 @@ function PlannerApp({ user }) {
                     </span>
                     <small className="place-search-note">Search term sent to Photon.</small>
                   </label>
-                  <label>Type<select value={activityDraft.type} onChange={(event) => setActivityDraft({ ...activityDraft, type: event.target.value })}><option>Hike</option><option>Food</option><option>Travel</option><option>Stay</option><option>Scenic</option><option>Other</option></select></label>
+                  <label>Type<select value={activityDraft.type} onChange={(event) => setActivityDraft({ ...activityDraft, type: event.target.value })}><option>Hike</option><option>Food</option><option>Travel</option><option>Stay</option><option>Scenic</option><option>Activity</option><option>Other</option></select></label>
                   <label>Cost ($)<input type="number" min="0" step="0.01" value={activityDraft.cost} onChange={(event) => setActivityDraft({ ...activityDraft, cost: event.target.value })} placeholder="0" /></label>
                   <label>Distance (mi)<input type="number" min="0" step="0.1" value={activityDraft.miles} onChange={(event) => setActivityDraft({ ...activityDraft, miles: event.target.value })} placeholder="Optional" /></label>
                   <DurationInput

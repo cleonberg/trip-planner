@@ -1651,33 +1651,46 @@
   border-radius: 7px;
 }
 
-.lifetime-map-panel .trip-map:fullscreen {
+.trip-map-shell:fullscreen {
+  display: flex;
   width: 100vw;
   height: 100vh;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 12px;
+  background: #fff;
+}
+
+.trip-map-shell:fullscreen .trip-map {
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  flex: 1;
   border-radius: 0;
 }
 
 .map-toolbar {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1100;
-  display: grid;
-  justify-items: end;
-  gap: 6px;
-  max-width: calc(100% - 58px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
   padding: 7px;
   border: 1px solid #dfe6df;
   border-radius: 7px;
-  background: rgb(255 255 255 / 94%);
-  box-shadow: 0 2px 8px rgb(34 54 42 / 14%);
+  background: #fff;
 }
 
 .map-toolbar-actions,
 .map-toolbar-filters {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 5px;
 }
 
@@ -1721,6 +1734,7 @@
 }
 
 .map-tool-error {
+  flex-basis: 100%;
   color: #985b4e;
   font-size: 11px;
   text-align: right;
@@ -3180,9 +3194,9 @@
 }
 
 .trip-overview-calendar .fc .fc-timegrid-event.calendar-type-transit {
-  border: 1px dashed #c79a54;
-  background: #fff6e6;
-  color: #80602d;
+  border: 1px dashed #cbd0d6;
+  background: #f1f3f5;
+  color: #59636e;
   cursor: default;
 }
 

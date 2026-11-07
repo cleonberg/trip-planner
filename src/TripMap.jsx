@@ -47,26 +47,56 @@ function MapScrollWheelZoom({ enabled }) {
   const map = useMap()
 
   useEffect(() => {
-    if (enabled) {
-      map.scrollWheelZoom.enable()
-    } else {
-      map.scrollWheelZoom.disable()
+    map.scrollWheelZoom.disable()
+    if (!enabled) return undefined
+
+    const container = map.getContainer()
+    let isWheelGestureActive = false
+    let gestureTimer
+
+    function handleWheel(event) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.deltaY && !isWheelGestureActive) {
+        const direction = event.deltaY < 0 ? 1 : -1
+        map.setZoomAround(map.mouseEventToContainerPoint(event), map.getZoom() + direction)
+        isWheelGestureActive = true
+      }
+
+      window.clearTimeout(gestureTimer)
+      gestureTimer = window.setTimeout(() => {
+        isWheelGestureActive = false
+      }, 50)
     }
 
-    return () => map.scrollWheelZoom.disable()
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => {
+      window.clearTimeout(gestureTimer)
+      container.removeEventListener('wheel', handleWheel)
+      map.scrollWheelZoom.disable()
+    }
   }, [enabled, map])
 
   return null
 }
 
-function MapToolbar({ points, mapLayer, onToggleLayer, mapFilters, onMapFilterChange }) {
+function MapInstanceBridge({ onMapReady }) {
   const map = useMap()
+
+  useEffect(() => {
+    onMapReady(map)
+  }, [map, onMapReady])
+
+  return null
+}
+
+function MapToolbar({ map, points, mapLayer, onToggleLayer, mapFilters, onMapFilterChange }) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [toolError, setToolError] = useState('')
 
   useEffect(() => {
     function handleFullscreenChange() {
-      setIsFullscreen(document.fullscreenElement === map.getContainer())
+      setIsFullscreen(document.fullscreenElement === map.getContainer().parentElement)
       window.requestAnimationFrame(() => map.invalidateSize())
     }
 
@@ -83,7 +113,7 @@ function MapToolbar({ points, mapLayer, onToggleLayer, mapFilters, onMapFilterCh
   }
 
   async function toggleFullscreen() {
-    const container = map.getContainer()
+    const container = map.getContainer().parentElement
     setToolError('')
     try {
       if (document.fullscreenElement === container) {
@@ -146,6 +176,7 @@ function TripMap({
   onMapFilterChange,
 }) {
   const [mapLayer, setMapLayer] = useState('street')
+  const [mapInstance, setMapInstance] = useState(null)
   const points = useMemo(
     () => (fitActivities ?? activities)
       .filter((activity) => activity.coordinates)
@@ -155,6 +186,14 @@ function TripMap({
   const routePositions = useMemo(
     () => routeCoordinates.map(([longitude, latitude]) => [latitude, longitude]),
     [routeCoordinates],
+  )
+  const routeSegmentPositions = useMemo(
+    () => routeSegments.flatMap((segment) => segment.coordinates),
+    [routeSegments],
+  )
+  const viewportPoints = useMemo(
+    () => [...points, ...routePositions, ...routeSegmentPositions],
+    [points, routePositions, routeSegmentPositions],
   )
   const markerColors = {
     planned: '#2563eb',
@@ -172,22 +211,10 @@ function TripMap({
       }
 
   return (
-    <MapContainer
-      className="trip-map"
-      center={points[0] || (selectedLocation
-        ? [selectedLocation.lat, selectedLocation.lng]
-        : initialCenter
-          ? [initialCenter.lat, initialCenter.lng]
-          : DEFAULT_CENTER)}
-      zoom={12}
-      scrollWheelZoom={scrollWheelZoom}
-    >
-      <MapViewport initialCenter={initialCenter} points={points} selectedLocation={selectedLocation} />
-      <MapScrollWheelZoom enabled={scrollWheelZoom} />
-      {onLocationSelect && <MapClickHandler onLocationSelect={onLocationSelect} />}
-      <TileLayer attribution={tileLayer.attribution} url={tileLayer.url} />
-      {showToolbar && (
+    <div className="trip-map-shell">
+      {showToolbar && mapInstance && (
         <MapToolbar
+          map={mapInstance}
           points={points}
           mapLayer={mapLayer}
           onToggleLayer={() => setMapLayer((currentLayer) => currentLayer === 'street' ? 'satellite' : 'street')}
@@ -195,46 +222,62 @@ function TripMap({
           onMapFilterChange={onMapFilterChange}
         />
       )}
-      {routePositions.length > 1 && (
-        <Polyline positions={routePositions} pathOptions={{ color: '#427353', weight: 5, opacity: 0.8 }} />
-      )}
-      {routeSegments.map((segment, index) => (
-        <Polyline
-          key={`${segment.type}-${index}`}
-          positions={segment.coordinates}
-          pathOptions={segment.type === 'flight'
-            ? { color: '#a15e39', weight: 3, opacity: 0.9, dashArray: '8 8' }
-            : { color: '#427353', weight: 5, opacity: 0.8 }}
-        />
-      ))}
-      {activities.map((activity, index) => activity.coordinates && (
-        <CircleMarker
-          center={[activity.coordinates.lat, activity.coordinates.lng]}
-          key={activity.id ?? `${activity.time}-${activity.title}-${index}`}
-          pathOptions={{ color: '#fff', fillColor: activity.mapColor ?? markerColors[activity.mapStatus] ?? '#315a49', fillOpacity: 1, weight: 3 }}
-          radius={activity.mapRadius ?? 9}
-          eventHandlers={activity.tripId && onTripMarkerClick
-            ? { click: () => onTripMarkerClick(activity.tripId) }
-            : undefined}
-        >
-          <Tooltip>
-            <strong>{activity.title}</strong><br />
-            {activity.time}<br />
-            {activity.place}
-            {activity.locationDetails && <><br />{activity.locationDetails}</>}
-          </Tooltip>
-        </CircleMarker>
-      ))}
-      {selectedLocation && (
-        <CircleMarker
-          center={[selectedLocation.lat, selectedLocation.lng]}
-          pathOptions={{ color: '#fff', fillColor: '#a15e39', fillOpacity: 1, weight: 3 }}
-          radius={9}
-        >
-          <Tooltip>Selected location</Tooltip>
-        </CircleMarker>
-      )}
-    </MapContainer>
+      <MapContainer
+        className="trip-map"
+        center={points[0] || (selectedLocation
+          ? [selectedLocation.lat, selectedLocation.lng]
+          : initialCenter
+            ? [initialCenter.lat, initialCenter.lng]
+            : DEFAULT_CENTER)}
+        zoom={12}
+            scrollWheelZoom={false}
+      >
+        <MapInstanceBridge onMapReady={setMapInstance} />
+        <MapViewport initialCenter={initialCenter} points={viewportPoints} selectedLocation={selectedLocation} />
+        <MapScrollWheelZoom enabled={scrollWheelZoom} />
+        {onLocationSelect && <MapClickHandler onLocationSelect={onLocationSelect} />}
+        <TileLayer attribution={tileLayer.attribution} url={tileLayer.url} />
+        {routePositions.length > 1 && (
+          <Polyline positions={routePositions} pathOptions={{ color: '#427353', weight: 5, opacity: 0.8 }} />
+        )}
+        {routeSegments.map((segment, index) => (
+          <Polyline
+            key={`${segment.type}-${index}`}
+            positions={segment.coordinates}
+            pathOptions={segment.type === 'flight'
+              ? { color: '#a15e39', weight: 3, opacity: 0.9, dashArray: '8 8' }
+              : { color: '#427353', weight: 5, opacity: 0.8 }}
+          />
+        ))}
+        {activities.map((activity, index) => activity.coordinates && (
+          <CircleMarker
+            center={[activity.coordinates.lat, activity.coordinates.lng]}
+            key={activity.id ?? `${activity.time}-${activity.title}-${index}`}
+            pathOptions={{ color: '#fff', fillColor: activity.mapColor ?? markerColors[activity.mapStatus] ?? '#315a49', fillOpacity: 1, weight: 3 }}
+            radius={activity.mapRadius ?? 9}
+            eventHandlers={activity.tripId && onTripMarkerClick
+              ? { click: () => onTripMarkerClick(activity.tripId) }
+              : undefined}
+          >
+            <Tooltip>
+              <strong>{activity.title}</strong><br />
+              {activity.time}<br />
+              {activity.place}
+              {activity.locationDetails && <><br />{activity.locationDetails}</>}
+            </Tooltip>
+          </CircleMarker>
+        ))}
+        {selectedLocation && (
+          <CircleMarker
+            center={[selectedLocation.lat, selectedLocation.lng]}
+            pathOptions={{ color: '#fff', fillColor: '#a15e39', fillOpacity: 1, weight: 3 }}
+            radius={9}
+          >
+            <Tooltip>Selected location</Tooltip>
+          </CircleMarker>
+        )}
+      </MapContainer>
+    </div>
   )
 }
 

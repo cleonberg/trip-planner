@@ -4,7 +4,7 @@ import TripActivityForm from './TripActivityForm.jsx'
 import TripDetailsForm from './TripDetailsForm.jsx'
 import TripMap from './TripMap.jsx'
 import TripRouteMap from './TripRouteMap.jsx'
-import { getDrivingLeg } from './routing.js'
+import { getDrivingLeg, getDrivingRoute } from './routing.js'
 import './TripPreview.css'
 
 const TripCalendar = lazy(() => import('./TripCalendar.jsx'))
@@ -71,7 +71,12 @@ function formatTravelDuration(minutes) {
   return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`
 }
 
-function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlistItem, onScheduleItem, onSaveActivity, onRemoveActivity, onUpdateItem, onUpdateTrip }) {
+function getTravelPlacement(connection, durationMinutes, placement) {
+  if (Number.isFinite(durationMinutes) && durationMinutes <= 30) return 'before-next'
+  return placement ?? connection.defaultPlacement
+}
+
+function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlistItem, onScheduleItem, onSaveActivity, onSaveActivities, onRemoveActivity, onUpdateItem, onUpdateTrip }) {
   const [schedulingItemId, setSchedulingItemId] = useState(null)
   const [scheduleView, setScheduleView] = useState('calendar')
   const [isEditingDetails, setIsEditingDetails] = useState(false)
@@ -82,8 +87,11 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   const [mapView, setMapView] = useState('overview')
   const [travelTimeEvents, setTravelTimeEvents] = useState([])
   const [travelTimeError, setTravelTimeError] = useState('')
+  const [travelTimeWarning, setTravelTimeWarning] = useState('')
   const [isEstimatingTravelTimes, setIsEstimatingTravelTimes] = useState(false)
+  const [overviewRouteResult, setOverviewRouteResult] = useState(null)
   const [travelEstimateAttempt, setTravelEstimateAttempt] = useState(0)
+  const [activeTravelConnectionId, setActiveTravelConnectionId] = useState(null)
   const tripExperiences = useMemo(
     () => wishlist.filter((item) => item.tripId === trip.id),
     [trip.id, wishlist],
@@ -183,6 +191,81 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
     scheduledItems,
     tripActivities,
   ])
+  const travelConnections = useMemo(() => {
+    const entriesByDay = new Map()
+    scheduledEntries.forEach((entry) => {
+      const entries = entriesByDay.get(entry.dayNumber) ?? []
+      entries.push(entry)
+      entriesByDay.set(entry.dayNumber, entries)
+    })
+
+    function getEntryDateTime(dayNumber, entry) {
+      const day = calendarDays[dayNumber - 1]
+      if (!day) return null
+      const [hour, minute] = entry.time.split(':').map(Number)
+      const date = new Date(`${day.dateISO}T00:00:00`)
+      date.setHours(hour, minute)
+      return date
+    }
+
+    const stayIntervals = scheduledEntries
+      .filter((entry) => entry.type === 'Stay')
+      .flatMap((entry) => {
+        const start = getEntryDateTime(entry.dayNumber, entry)
+        if (!start) return []
+        const end = new Date(start)
+        end.setMinutes(end.getMinutes() + Number(entry.durationMinutes || 0))
+        return [{ entry, start, end }]
+      })
+    const connections = []
+
+    for (const [dayNumber, entries] of entriesByDay) {
+      for (let index = 0; index < entries.length - 1; index += 1) {
+        const previous = entries[index]
+        const next = entries[index + 1]
+        if (previous.type === 'Stay') continue
+        connections.push({
+          id: `travel-${dayNumber}-${previous.id}-${next.id}`,
+          dayNumber,
+          from: previous,
+          to: next,
+          defaultPlacement: 'after-previous',
+        })
+      }
+
+      const firstActivity = entries.find((entry) => entry.type !== 'Stay')
+      if (!firstActivity) continue
+      const firstActivityStart = getEntryDateTime(dayNumber, firstActivity)
+      if (!firstActivityStart) continue
+      const day = calendarDays[dayNumber - 1]
+      if (!day) continue
+      const dayStart = new Date(`${day.dateISO}T00:00:00`)
+      const stay = stayIntervals
+        .filter((interval) => interval.start < firstActivityStart && interval.end > dayStart)
+        .sort((first, second) => second.start - first.start)[0]
+      if (!stay) continue
+
+      connections.push({
+        id: `travel-stay-${dayNumber}-${stay.entry.id}-${firstActivity.id}`,
+        dayNumber,
+        from: stay.entry,
+        to: firstActivity,
+        defaultPlacement: 'before-next',
+      })
+    }
+
+    return connections
+  }, [calendarDays, scheduledEntries])
+  const overviewRouteKey = JSON.stringify(travelConnections.map((connection) => [
+    connection.id,
+    trip.travelSettings?.[connection.id]?.mode ?? 'driving',
+    getTravelCoordinates(connection.from, true),
+    getTravelCoordinates(connection.to, false),
+  ]))
+  const hasCurrentOverviewRoutes = overviewRouteResult?.key === overviewRouteKey
+  const overviewRouteSegments = hasCurrentOverviewRoutes ? overviewRouteResult.segments : []
+  const overviewRouteError = hasCurrentOverviewRoutes ? overviewRouteResult.error : ''
+  const isLoadingOverviewRoutes = mapView === 'overview' && !hasCurrentOverviewRoutes
   const calendarEvents = useMemo(() => scheduledEntries.flatMap((item) => {
     const day = calendarDays[item.dayNumber - 1]
     if (!day) return []
@@ -212,16 +295,11 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
     async function estimateTravelTimes() {
       setTravelTimeEvents([])
       setTravelTimeError('')
+      setTravelTimeWarning('')
       setIsEstimatingTravelTimes(true)
-      const entriesByDay = new Map()
-      scheduledEntries.forEach((entry) => {
-        const entries = entriesByDay.get(entry.dayNumber) ?? []
-        entries.push(entry)
-        entriesByDay.set(entry.dayNumber, entries)
-      })
-
       const travelEvents = []
       let failedRoutes = 0
+      let blockedRoutes = 0
       function getEntryDateTime(dayNumber, entry) {
         const day = calendarDays[dayNumber - 1]
         if (!day) return null
@@ -231,100 +309,108 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
         return date
       }
 
-      function addTravelEvent(id, next, start, durationMinutes) {
-        const end = new Date(start)
-        end.setMinutes(end.getMinutes() + durationMinutes)
-        const destination = next.type === 'Flight'
-          ? next.origin || next.place || next.title
-          : next.place || next.title
+      const scheduledIntervals = scheduledEntries.flatMap((entry) => {
+        const start = getEntryDateTime(entry.dayNumber, entry)
+        if (!start) return []
+        return [{
+          start,
+          end: new Date(start.getTime() + Number(entry.durationMinutes || 0) * 60_000),
+        }]
+      })
+
+      function addTravelEvent(
+        connection,
+        durationMinutes,
+        mode,
+        isCustomDuration,
+        placement,
+        displayDurationMinutes = durationMinutes,
+      ) {
+        const nextStart = getEntryDateTime(connection.to.dayNumber, connection.to)
+        const previousStart = getEntryDateTime(connection.from.dayNumber, connection.from)
+        if (!nextStart || !previousStart) return
+        const endsAtNextActivity = placement === 'before-next' || durationMinutes <= 30
+        let start = new Date(previousStart.getTime() + Number(connection.from.durationMinutes || 0) * 60_000)
+        let end = new Date(start.getTime() + durationMinutes * 60_000)
+        if (endsAtNextActivity) {
+          end = new Date(nextStart)
+          start = new Date(end.getTime() - durationMinutes * 60_000)
+        }
+        const overlapsScheduledEvent = scheduledIntervals.some((interval) => (
+          start < interval.end && end > interval.start
+        ))
+        const overlapsTravelEvent = travelEvents.some((event) => (
+          start < event.end && end > event.start
+        ))
+        if (end > nextStart.getTime()
+          || overlapsScheduledEvent
+          || overlapsTravelEvent) {
+          blockedRoutes += 1
+          return
+        }
+
+        const destination = connection.to.type === 'Flight'
+          ? connection.to.origin || connection.to.place || connection.to.title
+          : connection.to.place || connection.to.title
+        const modeLabel = mode === 'walking' ? 'Walking' : 'Driving'
         travelEvents.push({
-          id,
-          title: `Travel to ${destination}`,
+          id: connection.id,
+          title: `${mode === 'walking' ? 'Walk' : 'Travel'} to ${destination}`,
           start,
           end,
-          classNames: ['calendar-type-transit'],
+          classNames: [
+            'calendar-type-transit',
+            ...(durationMinutes < 30 ? ['calendar-type-transit-short'] : []),
+          ],
           editable: false,
           startEditable: false,
           durationEditable: false,
           extendedProps: {
-            type: `Travel time · ${formatTravelDuration(durationMinutes)}`,
-            place: 'Driving estimate',
+            type: `Travel time · ${formatTravelDuration(displayDurationMinutes)}`,
+            place: isCustomDuration ? `Custom ${modeLabel.toLowerCase()} time` : `${modeLabel} estimate`,
             kind: 'travel',
+            mode: modeLabel,
+            durationLabel: formatTravelDuration(displayDurationMinutes),
           },
         })
       }
 
-      const stayIntervals = scheduledEntries
-        .filter((entry) => entry.type === 'Stay')
-        .flatMap((entry) => {
-          const start = getEntryDateTime(entry.dayNumber, entry)
-          if (!start) return []
-          const end = new Date(start)
-          end.setMinutes(end.getMinutes() + Number(entry.durationMinutes || 0))
-          return [{ entry, start, end }]
-        })
-
-      for (const [dayNumber, entries] of entriesByDay) {
-        const day = calendarDays[dayNumber - 1]
-        if (!day) continue
-
-        for (let index = 0; index < entries.length - 1; index += 1) {
-          const previous = entries[index]
-          const next = entries[index + 1]
-          if (previous.type === 'Stay') continue
-          const from = getTravelCoordinates(previous, true)
-          const to = getTravelCoordinates(next, false)
-          if (!isCoordinates(from) || !isCoordinates(to) || getDistanceMeters(from, to) <= 100) continue
-
-          try {
-            const leg = await getDrivingLeg(from, to, controller.signal)
-            const durationMinutes = Math.max(1, Math.ceil(leg.duration / 60))
-            const [previousHour, previousMinute] = previous.time.split(':').map(Number)
-            const start = new Date(`${day.dateISO}T00:00:00`)
-            start.setHours(previousHour, previousMinute + Number(previous.durationMinutes || 0))
-            addTravelEvent(`travel-${dayNumber}-${previous.id}-${next.id}`, next, start, durationMinutes)
-          } catch (error) {
-            if (error.name === 'AbortError') return
-            console.error('Unable to estimate travel time between itinerary events.', error)
-            failedRoutes += 1
-          }
+      for (const connection of travelConnections) {
+        const settings = trip.travelSettings?.[connection.id] ?? {}
+        const mode = settings.mode ?? 'driving'
+        if (mode === 'off') continue
+        const requestedManualDuration = Number(settings.durationMinutes)
+        const hasManualDuration = settings.durationMinutes !== ''
+          && Number.isFinite(requestedManualDuration)
+          && requestedManualDuration > 0
+        const manualDuration = hasManualDuration ? Math.max(30, requestedManualDuration) : 0
+        function getPlacement(durationMinutes) {
+          return getTravelPlacement(connection, durationMinutes, settings.placement)
         }
-      }
+        if (hasManualDuration) {
+          addTravelEvent(connection, manualDuration, mode, true, getPlacement(manualDuration))
+          continue
+        }
+        if (mode !== 'driving') continue
 
-      for (const day of calendarDays) {
-        const dayNumber = calendarDays.findIndex((candidate) => candidate.id === day.id) + 1
-        const entries = entriesByDay.get(dayNumber) ?? []
-        const firstActivity = entries.find((entry) => (
-          entry.type !== 'Stay' && isCoordinates(getTravelCoordinates(entry, false))
-        ))
-        if (!firstActivity) continue
-
-        const firstActivityStart = getEntryDateTime(dayNumber, firstActivity)
-        if (!firstActivityStart) continue
-        const dayStart = new Date(`${day.dateISO}T00:00:00`)
-        const stay = stayIntervals
-          .filter((interval) => interval.start < firstActivityStart && interval.end > dayStart)
-          .sort((first, second) => second.start - first.start)[0]
-        if (!stay) continue
-
-        const from = getTravelCoordinates(stay.entry, true)
-        const to = getTravelCoordinates(firstActivity, false)
+        const from = getTravelCoordinates(connection.from, true)
+        const to = getTravelCoordinates(connection.to, false)
         if (!isCoordinates(from) || !isCoordinates(to) || getDistanceMeters(from, to) <= 100) continue
-
         try {
           const leg = await getDrivingLeg(from, to, controller.signal)
-          const durationMinutes = Math.max(1, Math.ceil(leg.duration / 60))
-          const start = new Date(firstActivityStart)
-          start.setMinutes(start.getMinutes() - durationMinutes)
+          const estimatedDurationMinutes = Math.ceil(leg.duration / 60)
+          const blockDurationMinutes = Math.max(30, estimatedDurationMinutes)
           addTravelEvent(
-            `travel-stay-${dayNumber}-${stay.entry.id}-${firstActivity.id}`,
-            firstActivity,
-            start,
-            durationMinutes,
+            connection,
+            blockDurationMinutes,
+            mode,
+            false,
+            getPlacement(blockDurationMinutes),
+            estimatedDurationMinutes,
           )
         } catch (error) {
           if (error.name === 'AbortError') return
-          console.error('Unable to estimate travel time from the overnight stay to the first activity.', error)
+          console.error('Unable to estimate travel time between itinerary events.', error)
           failedRoutes += 1
         }
       }
@@ -334,6 +420,9 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
       setTravelTimeError(failedRoutes
         ? `Travel-time estimates failed for ${failedRoutes} route${failedRoutes === 1 ? '' : 's'}.`
         : '')
+      setTravelTimeWarning(blockedRoutes
+        ? `${blockedRoutes} travel block${blockedRoutes === 1 ? '' : 's'} hidden because there wasn't enough open time to avoid overlapping scheduled items.`
+        : '')
       setIsEstimatingTravelTimes(false)
     }
 
@@ -342,7 +431,52 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
       active = false
       controller.abort()
     }
-  }, [calendarDays, scheduledEntries, travelEstimateAttempt])
+  }, [calendarDays, scheduledEntries, travelConnections, travelEstimateAttempt, trip.travelSettings])
+
+  useEffect(() => {
+    if (mapView !== 'overview' || overviewRouteResult?.key === overviewRouteKey) return undefined
+
+    let active = true
+    const controller = new AbortController()
+
+    async function loadOverviewRoutes() {
+      const results = await Promise.all(travelConnections.map(async (connection) => {
+        const settings = trip.travelSettings?.[connection.id] ?? {}
+        if ((settings.mode ?? 'driving') !== 'driving') return null
+
+        const from = getTravelCoordinates(connection.from, true)
+        const to = getTravelCoordinates(connection.to, false)
+        if (!isCoordinates(from) || !isCoordinates(to) || getDistanceMeters(from, to) <= 100) return null
+
+        try {
+          const route = await getDrivingRoute([from, to], controller.signal)
+          if ((route.legs[0]?.duration ?? 0) < 30 * 60) return null
+          return { type: 'driving', coordinates: route.coordinates }
+        } catch (error) {
+          if (error.name === 'AbortError') return null
+          console.error('Unable to load a driving route for the trip overview map.', error)
+          return { error: true }
+        }
+      }))
+
+      if (!active) return
+      const segments = results.filter((result) => result && !result.error)
+      const failedRoutes = results.filter((result) => result?.error).length
+      setOverviewRouteResult({
+        key: overviewRouteKey,
+        segments,
+        error: failedRoutes
+          ? `${failedRoutes} driving route${failedRoutes === 1 ? '' : 's'} could not be shown on the overview map.`
+          : '',
+      })
+    }
+
+    loadOverviewRoutes()
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [mapView, overviewRouteKey, overviewRouteResult?.key, travelConnections, trip.travelSettings])
 
   const unscheduledItems = tripExperiences.filter((item) => !item.schedule)
   const availableIdeas = wishlist.filter((item) => !item.tripId)
@@ -350,14 +484,82 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
   const activeRouteDayNumber = mapView === 'overview'
     ? 1
     : Math.min(Number(mapView), calendarDays.length)
-  const routeItems = useMemo(
-    () => mapView === 'overview'
-      ? []
-      : scheduledEntries.filter((item) => item.dayNumber === activeRouteDayNumber),
-    [activeRouteDayNumber, mapView, scheduledEntries],
-  )
+  const routeItems = useMemo(() => {
+    if (mapView === 'overview') return []
+    const dayEntries = scheduledEntries.filter((item) => item.dayNumber === activeRouteDayNumber)
+    const firstActivity = dayEntries.find((item) => item.type !== 'Stay')
+    const day = calendarDays[activeRouteDayNumber - 1]
+    if (!firstActivity || !day) return dayEntries
+
+    const [hour, minute] = firstActivity.time.split(':').map(Number)
+    const firstActivityStart = new Date(`${day.dateISO}T00:00:00`)
+    firstActivityStart.setHours(hour, minute)
+    const dayStart = new Date(`${day.dateISO}T00:00:00`)
+    const overnightStay = scheduledEntries
+      .filter((item) => item.type === 'Stay')
+      .map((item) => {
+        const stayDay = calendarDays[item.dayNumber - 1]
+        if (!stayDay) return null
+        const [stayHour, stayMinute] = item.time.split(':').map(Number)
+        const start = new Date(`${stayDay.dateISO}T00:00:00`)
+        start.setHours(stayHour, stayMinute)
+        const end = new Date(start)
+        end.setMinutes(end.getMinutes() + Number(item.durationMinutes || 0))
+        return { item, start, end }
+      })
+      .filter((interval) => interval
+        && interval.start < firstActivityStart
+        && interval.end > dayStart)
+      .sort((first, second) => second.start - first.start)[0]?.item
+
+    return overnightStay && !dayEntries.some((item) => item.id === overnightStay.id)
+      ? [overnightStay, ...dayEntries]
+      : dayEntries
+  }, [activeRouteDayNumber, calendarDays, mapView, scheduledEntries])
   const editingScheduledItem = tripExperiences.find((item) => item.id === schedulingItemId && item.schedule)
   const editingActivity = tripActivities.find((activity) => activity.id === editingActivityId)
+  const activeTravelConnection = travelConnections.find(
+    (connection) => connection.id === activeTravelConnectionId,
+  )
+  const activeTravelSettings = activeTravelConnection
+    ? trip.travelSettings?.[activeTravelConnection.id] ?? {}
+    : {}
+  const activeTravelMode = activeTravelSettings.mode ?? 'driving'
+  const activeTravelManualDuration = Number(activeTravelSettings.durationMinutes)
+  const activeTravelHasManualDuration = activeTravelSettings.durationMinutes !== ''
+    && Number.isFinite(activeTravelManualDuration)
+    && activeTravelManualDuration > 0
+  const activeTravelEvent = activeTravelConnection
+    ? travelTimeEvents.find((event) => event.id === activeTravelConnection.id)
+    : null
+  const activeTravelDuration = activeTravelHasManualDuration
+    ? activeTravelManualDuration
+    : activeTravelEvent?.start && activeTravelEvent?.end
+      ? (activeTravelEvent.end - activeTravelEvent.start) / 60000
+      : Number.NaN
+  const activeTravelUsesMinimumBlock = Number.isFinite(activeTravelDuration) && activeTravelDuration <= 30
+  const activeTravelDefaultPlacement = activeTravelConnection
+    ? getTravelPlacement(activeTravelConnection, activeTravelDuration, activeTravelSettings.placement)
+    : 'before-next'
+  const activeTravelFrom = activeTravelConnection
+    ? getTravelCoordinates(activeTravelConnection.from, true)
+    : null
+  const activeTravelTo = activeTravelConnection
+    ? getTravelCoordinates(activeTravelConnection.to, false)
+    : null
+  const canEstimateActiveDriving = isCoordinates(activeTravelFrom)
+    && isCoordinates(activeTravelTo)
+    && getDistanceMeters(activeTravelFrom, activeTravelTo) > 100
+  const activeTravelFromLabel = activeTravelConnection
+    ? activeTravelConnection.from.type === 'Stay'
+      ? `Overnight stay (${activeTravelConnection.from.place || activeTravelConnection.from.title})`
+      : activeTravelConnection.from.title
+    : ''
+  const activeTravelToLabel = activeTravelConnection
+    ? activeTravelConnection.to.type === 'Flight'
+      ? activeTravelConnection.to.origin || activeTravelConnection.to.place || activeTravelConnection.to.title
+      : activeTravelConnection.to.place || activeTravelConnection.to.title
+    : ''
 
   function formatTime(time) {
     const [hour, minute] = time.split(':').map(Number)
@@ -369,6 +571,26 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
     const remainingMinutes = minutes % 60
     if (!hours) return `${minutes} min`
     return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`
+  }
+
+  function updateTravelSetting(connection, field, value) {
+    const travelSettings = trip.travelSettings ?? {}
+    onUpdateTrip({
+      ...trip,
+      travelSettings: {
+        ...travelSettings,
+        [connection.id]: {
+          ...(travelSettings[connection.id] ?? {}),
+          [field]: value,
+        },
+      },
+    })
+  }
+
+  function toggleTravelSettings() {
+    setActiveTravelConnectionId((currentId) => (
+      currentId ? null : travelConnections[0]?.id ?? null
+    ))
   }
 
   function isScheduleEventAllowed(start, end, event) {
@@ -427,7 +649,11 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
 
   function handleScheduleEventClick(info) {
     info.jsEvent.preventDefault()
-    if (info.event.extendedProps.kind === 'travel') return
+    if (info.event.extendedProps.kind === 'travel') {
+      setActiveTravelConnectionId(info.event.id)
+      return
+    }
+    setActiveTravelConnectionId(null)
     if (info.event.extendedProps.kind === 'activity') {
       setIsAddingActivity(false)
       setEditingActivityId(info.event.id)
@@ -606,7 +832,20 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
         </div>
         {mapView === 'overview'
           ? tripMapMarkers.length > 0
-            ? <div className="trip-overview-map-view"><TripMap activities={tripMapMarkers} scrollWheelZoom /></div>
+            ? <>
+              <div className="trip-overview-map-view">
+                <TripMap
+                  activities={tripMapMarkers}
+                  routeSegments={overviewRouteSegments}
+                  scrollWheelZoom
+                />
+              </div>
+              <p className="trip-overview-map-note">
+                Driving routes of 30 minutes or more are shown.
+                {isLoadingOverviewRoutes && ' Loading routes…'}
+                {overviewRouteError && ` ${overviewRouteError}`}
+              </p>
+            </>
             : <p className="empty-map-message">Add key places, activities, or assigned ideas with locations to map this trip.</p>
           : <TripRouteMap
             items={routeItems}
@@ -634,7 +873,111 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
           <button type="button" role="tab" aria-selected={scheduleView === 'agenda'} className={scheduleView === 'agenda' ? 'selected' : ''} onClick={() => setScheduleView('agenda')}>Agenda</button>
         </div>
         {scheduleView === 'calendar' && (
-          <p className="trip-travel-note">Travel blocks are estimated by car between itinerary events with mapped locations. They are visual only and are not saved to the trip.</p>
+          <>
+            <p className="trip-travel-note">
+              Travel estimates shorter than 30 minutes reserve a 30-minute block ending at the next activity. Click a block to edit it. Driving estimates use mapped road routes; enter walking minutes manually.
+            </p>
+            {travelConnections.length > 0 && (
+              <div className="trip-travel-settings">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  aria-expanded={Boolean(activeTravelConnection)}
+                  aria-controls="trip-travel-settings-editor"
+                  onClick={toggleTravelSettings}
+                >
+                  {activeTravelConnection ? 'Hide travel settings' : 'Manage travel settings'}
+                </button>
+                {activeTravelConnection && (
+                  <div className="trip-travel-setting" id="trip-travel-settings-editor">
+                    <div className="trip-travel-setting-heading">
+                      <strong>Day {activeTravelConnection.dayNumber}: {activeTravelFromLabel} → {activeTravelToLabel}</strong>
+                      <button
+                        className="text-button"
+                        type="button"
+                        aria-label="Close travel settings"
+                        onClick={() => setActiveTravelConnectionId(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    {travelConnections.length > 1 && (
+                      <label className="trip-travel-setting-connection">
+                        <span>Travel segment</span>
+                        <select
+                          value={activeTravelConnection.id}
+                          onChange={(event) => setActiveTravelConnectionId(event.target.value)}
+                        >
+                          {travelConnections.map((connection) => (
+                            <option key={connection.id} value={connection.id}>
+                              Day {connection.dayNumber}: {connection.from.title} to {connection.to.title}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <div className="trip-travel-setting-fields">
+                      <label>
+                        <span>Travel mode</span>
+                        <select
+                          aria-label={`Travel mode from ${activeTravelFromLabel} to ${activeTravelToLabel}`}
+                          value={activeTravelMode}
+                          onChange={(event) => updateTravelSetting(activeTravelConnection, 'mode', event.target.value)}
+                        >
+                          <option value="driving">Driving</option>
+                          <option value="walking">Walking</option>
+                          <option value="off">Off</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Minutes {activeTravelMode === 'walking' ? '(required; min 30)' : '(optional override; min 30)'}</span>
+                        <input
+                          aria-label={`Travel minutes from ${activeTravelFromLabel} to ${activeTravelToLabel}`}
+                          type="number"
+                          min="30"
+                          step="1"
+                          value={activeTravelSettings.durationMinutes ?? ''}
+                          placeholder={activeTravelMode === 'walking' ? 'Enter minutes' : 'Auto'}
+                          onChange={(event) => updateTravelSetting(
+                            activeTravelConnection,
+                            'durationMinutes',
+                            event.target.value === '' ? '' : Number(event.target.value),
+                          )}
+                          onBlur={(event) => {
+                            const value = Number(event.target.value)
+                            if (event.target.value !== '' && Number.isFinite(value) && value < 30) {
+                              updateTravelSetting(activeTravelConnection, 'durationMinutes', 30)
+                            }
+                          }}
+                        />
+                      </label>
+                      <label>
+                        <span>Place block</span>
+                        <select
+                          aria-label={`Travel block placement from ${activeTravelFromLabel} to ${activeTravelToLabel}`}
+                          value={activeTravelDefaultPlacement}
+                          disabled={activeTravelUsesMinimumBlock}
+                          onChange={(event) => updateTravelSetting(activeTravelConnection, 'placement', event.target.value)}
+                        >
+                          <option value="after-previous">After previous activity</option>
+                          <option value="before-next">Before next activity</option>
+                        </select>
+                      </label>
+                    </div>
+                    {activeTravelUsesMinimumBlock && (
+                      <p className="trip-travel-setting-hint">Blocks of 30 minutes or less end at the next activity.</p>
+                    )}
+                    {activeTravelMode === 'walking' && !activeTravelHasManualDuration && (
+                      <p className="trip-travel-setting-hint">Enter walking minutes to add this block.</p>
+                    )}
+                    {activeTravelMode === 'driving' && !activeTravelHasManualDuration && !canEstimateActiveDriving && (
+                      <p className="trip-travel-setting-hint">No mapped driving route is available. Enter minutes to add a block.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
         {scheduleView === 'calendar' && isEstimatingTravelTimes && (
           <p className="trip-travel-status" role="status">Estimating travel times between mapped locations…</p>
@@ -648,7 +991,30 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
             </button>
           </p>
         )}
+        {scheduleView === 'calendar' && travelTimeWarning && (
+          <p className="trip-travel-warning" role="status">{travelTimeWarning}</p>
+        )}
         {scheduledEntries.length === 0 && <p className="trip-preview-schedule-empty">Nothing is scheduled yet. Add a trip activity or schedule an assigned idea below.</p>}
+        {(isAddingActivity || editingActivity) && (
+          <TripActivityForm
+            key={editingActivity?.id ?? 'new'}
+            activity={editingActivity}
+            tripDays={calendarDays.length}
+            onCancel={() => {
+              setIsAddingActivity(false)
+              setEditingActivityId(null)
+            }}
+            onRemove={editingActivity ? () => {
+              onRemoveActivity(trip.id, editingActivity.id)
+              setEditingActivityId(null)
+            } : undefined}
+            onSave={(activity, dayNumbers) => {
+              onSaveActivities(trip.id, dayNumbers.map((dayNumber) => ({ ...activity, dayNumber })))
+              setIsAddingActivity(false)
+              setEditingActivityId(null)
+            }}
+          />
+        )}
         {scheduleView === 'calendar'
           ? (
             <Suspense fallback={<p className="calendar-loading">Loading trip calendar…</p>}>
@@ -682,26 +1048,6 @@ function TripPreview({ trip, minTripDays, wishlist, trips, onBack, onOpenWishlis
             ))}
           </div>
             : <p className="wishlist-empty-state">No scheduled ideas to show in the agenda yet.</p>}
-        {(isAddingActivity || editingActivity) && (
-          <TripActivityForm
-            key={editingActivity?.id ?? 'new'}
-            activity={editingActivity}
-            tripDays={calendarDays.length}
-            onCancel={() => {
-              setIsAddingActivity(false)
-              setEditingActivityId(null)
-            }}
-            onRemove={editingActivity ? () => {
-              onRemoveActivity(trip.id, editingActivity.id)
-              setEditingActivityId(null)
-            } : undefined}
-            onSave={(activity) => {
-              onSaveActivity(trip.id, activity)
-              setIsAddingActivity(false)
-              setEditingActivityId(null)
-            }}
-          />
-        )}
         {editingScheduledItem && (
           <ScheduleItemForm
             item={editingScheduledItem}

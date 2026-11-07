@@ -2,7 +2,7 @@ import { useState } from 'react'
 import PlaceSearchInput from './PlaceSearchInput.jsx'
 import DurationInput from './DurationInput.jsx'
 
-const activityTypes = ['Travel', 'Flight', 'Food', 'Stay', 'Scenic', 'Hike', 'Other']
+const activityTypes = ['Travel', 'Flight', 'Food', 'Stay', 'Scenic', 'Hike', 'Activity', 'Other']
 
 function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
   const [title, setTitle] = useState(activity?.title ?? '')
@@ -17,19 +17,26 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
   const [destinationDetails, setDestinationDetails] = useState(activity?.destinationDetails ?? '')
   const [destinationCoordinates, setDestinationCoordinates] = useState(activity?.destinationCoordinates ?? null)
   const [dayNumber, setDayNumber] = useState(activity?.dayNumber ?? 1)
+  const [selectedDayNumbers, setSelectedDayNumbers] = useState(
+    activity ? [Number(activity.dayNumber)] : [],
+  )
   const [time, setTime] = useState(activity?.time ?? '09:00')
   const [durationMinutes, setDurationMinutes] = useState(String(activity?.durationMinutes ?? 60))
   const [cost, setCost] = useState(String(activity?.cost ?? ''))
   const startMinutes = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
+  const lastScheduledDay = activity || selectedDayNumbers.length === 0
+    ? Number(dayNumber)
+    : Math.max(...selectedDayNumbers)
   const maxDurationMinutes = Math.max(
     15,
     type === 'Stay'
-      ? (tripDays - Number(dayNumber) + 1) * 24 * 60 + 23 * 60 - startMinutes
+      ? (tripDays - lastScheduledDay + 1) * 24 * 60 + 23 * 60 - startMinutes
       : 23 * 60 - startMinutes,
   )
 
   function handleSubmit(event) {
     event.preventDefault()
+    if (!activity && selectedDayNumbers.length === 0) return
     const location = type === 'Flight'
       ? {
           place: `${origin.trim()} → ${destination.trim()}`,
@@ -45,23 +52,28 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
           coordinates,
           locationDetails,
         }
+    const dayNumbers = activity ? [Number(dayNumber)] : selectedDayNumbers
     onSave({
       ...(activity?.id ? { id: activity.id } : {}),
       title: title.trim(),
       type,
       ...location,
-      dayNumber: Number(dayNumber),
+      dayNumber: dayNumbers[0],
       time,
       durationMinutes: Number(durationMinutes),
       cost: Number(cost || 0),
-    })
+    }, dayNumbers)
   }
 
   return (
     <form className="schedule-item-form" onSubmit={handleSubmit}>
       <div>
         <strong>{activity ? 'Edit trip activity' : 'Add a trip activity'}</strong>
-        <p>Plan a trip detail such as a flight, transfer, or meal without adding it to your wish list.</p>
+        <p>
+          {activity
+            ? 'Edit this trip activity.'
+            : 'Plan a trip detail such as a flight, transfer, or meal. Choose multiple days to create separate copies you can edit individually.'}
+        </p>
       </div>
       <div className="schedule-item-fields">
         <label>
@@ -139,12 +151,43 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
               />
             </label>
           )}
-        <label>
-          <span>Trip day</span>
-          <select value={dayNumber} onChange={(event) => setDayNumber(Number(event.target.value))}>
-            {Array.from({ length: tripDays }, (_, index) => index + 1).map((day) => <option key={day} value={day}>Day {day}</option>)}
-          </select>
-        </label>
+        {activity
+          ? (
+            <label>
+              <span>Trip day</span>
+              <select value={dayNumber} onChange={(event) => setDayNumber(Number(event.target.value))}>
+                {Array.from({ length: tripDays }, (_, index) => index + 1).map((day) => <option key={day} value={day}>Day {day}</option>)}
+              </select>
+            </label>
+          )
+          : (
+            <fieldset className="schedule-item-day-selection">
+              <legend>Schedule on days</legend>
+              <div className="schedule-item-day-options">
+                {Array.from({ length: tripDays }, (_, index) => index + 1).map((day) => (
+                  <label key={day}>
+                    <input
+                      type="checkbox"
+                      checked={selectedDayNumbers.includes(day)}
+                      onChange={(event) => {
+                        const isChecked = event.target.checked
+                        setSelectedDayNumbers((currentDays) => {
+                          const nextDays = isChecked
+                            ? [...currentDays, day].sort((first, second) => first - second)
+                            : currentDays.filter((currentDay) => currentDay !== day)
+                          return nextDays
+                        })
+                      }}
+                    />
+                    <span>Day {day}</span>
+                  </label>
+                ))}
+              </div>
+              {selectedDayNumbers.length === 0 && (
+                <p className="schedule-item-day-selection-hint">Select at least one day.</p>
+              )}
+            </fieldset>
+          )}
         <label>
           <span>Start time</span>
           <input required type="time" min="06:00" max="22:45" value={time} onChange={(event) => setTime(event.target.value)} />
@@ -158,7 +201,13 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
       <div className="schedule-item-actions">
         {activity && onRemove && <button className="text-button unschedule-button" type="button" onClick={onRemove}>Remove activity</button>}
         <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
-        <button className="primary-button" type="submit" disabled={!title.trim()}>Save activity</button>
+        <button
+          className="primary-button"
+          type="submit"
+          disabled={!title.trim() || (!activity && selectedDayNumbers.length === 0)}
+        >
+          Save activity
+        </button>
       </div>
     </form>
   )
