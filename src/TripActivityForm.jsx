@@ -4,7 +4,7 @@ import DurationInput from './DurationInput.jsx'
 
 const activityTypes = ['Activity', 'Flight', 'Food', 'Hike', 'Other', 'Scenic', 'Stay', 'Travel']
 
-function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
+function TripActivityForm({ activity, tripDays, staged = false, onSave, onCancel, onRemove, onStage }) {
   const [title, setTitle] = useState(activity?.title ?? '')
   const [type, setType] = useState(activity?.type ?? 'Travel')
   const [place, setPlace] = useState(activity?.place ?? '')
@@ -23,6 +23,12 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
   const [time, setTime] = useState(activity?.time ?? '09:00')
   const [durationMinutes, setDurationMinutes] = useState(String(activity?.durationMinutes ?? 60))
   const [cost, setCost] = useState(String(activity?.cost ?? ''))
+  const [imageUrl, setImageUrl] = useState(activity?.imageUrl ?? '')
+  const [resourceLinks, setResourceLinks] = useState(() => (
+    Array.isArray(activity?.links)
+      ? activity.links.map((link) => ({ label: link.label ?? '', url: link.url ?? '' }))
+      : []
+  ))
   const startMinutes = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
   const lastScheduledDay = activity || selectedDayNumbers.length === 0
     ? Number(dayNumber)
@@ -36,7 +42,7 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
 
   function handleSubmit(event) {
     event.preventDefault()
-    if (!activity && selectedDayNumbers.length === 0) return
+    if (!activity && !staged && selectedDayNumbers.length === 0) return
     const location = type === 'Flight'
       ? {
           place: `${origin.trim()} → ${destination.trim()}`,
@@ -52,16 +58,19 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
           coordinates,
           locationDetails,
         }
-    const dayNumbers = activity ? [Number(dayNumber)] : selectedDayNumbers
+    const dayNumbers = staged ? [] : activity ? [Number(dayNumber)] : selectedDayNumbers
     onSave({
       ...(activity?.id ? { id: activity.id } : {}),
       title: title.trim(),
       type,
       ...location,
-      dayNumber: dayNumbers[0],
-      time,
+      ...(!staged ? { dayNumber: dayNumbers[0], time } : {}),
       durationMinutes: Number(durationMinutes),
       cost: Number(cost || 0),
+      imageUrl: imageUrl.trim(),
+      links: resourceLinks
+        .filter((link) => link.url.trim())
+        .map((link) => ({ label: link.label.trim(), url: link.url.trim() })),
     }, dayNumbers)
   }
 
@@ -69,11 +78,11 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
     <form className="schedule-item-form" onSubmit={handleSubmit}>
       <div>
         <strong>{activity ? 'Edit trip activity' : 'Add a trip activity'}</strong>
-        <p>
-          {activity
+        <p>{staged
+          ? 'Keep this idea here until you decide when to fit it into the trip.'
+          : activity
             ? 'Edit this trip activity.'
-            : 'Plan a trip detail such as a flight, transfer, or meal. Choose multiple days to create separate copies you can edit individually.'}
-        </p>
+            : 'Plan a trip detail such as a flight, transfer, or meal. Choose multiple days to create separate copies you can edit individually.'}</p>
       </div>
       <div className="schedule-item-fields">
         <label>
@@ -151,7 +160,7 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
               />
             </label>
           )}
-        {activity
+        {!staged && activity
           ? (
             <label>
               <span>Trip day</span>
@@ -160,7 +169,7 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
               </select>
             </label>
           )
-          : (
+          : !staged && (
             <fieldset className="schedule-item-day-selection">
               <legend>Schedule on days</legend>
               <div className="schedule-item-day-options">
@@ -188,25 +197,80 @@ function TripActivityForm({ activity, tripDays, onSave, onCancel, onRemove }) {
               )}
             </fieldset>
           )}
-        <label>
+        {!staged && <label>
           <span>Start time</span>
           <input required type="time" min="06:00" max="22:45" value={time} onChange={(event) => setTime(event.target.value)} />
-        </label>
+        </label>}
         <DurationInput value={durationMinutes} maxMinutes={maxDurationMinutes} onChange={setDurationMinutes} />
         <label>
           <span>Cost ($)</span>
           <input type="number" min="0" step="0.01" value={cost} onChange={(event) => setCost(event.target.value)} placeholder="0" />
         </label>
+        <div className="activity-resource-editor">
+          <label>
+            <span>Activity image URL</span>
+            <input
+              type="url"
+              pattern="https?://.+"
+              title="Use a web address starting with http:// or https://."
+              value={imageUrl}
+              onChange={(event) => setImageUrl(event.target.value)}
+              placeholder="https://example.com/photo.jpg"
+            />
+          </label>
+          <fieldset className="activity-links-editor">
+            <legend>Information links</legend>
+            {resourceLinks.map((link, index) => (
+              <div className="activity-link-editor-row" key={index}>
+                <input
+                  aria-label={`Link ${index + 1} label`}
+                  value={link.label}
+                  onChange={(event) => setResourceLinks((currentLinks) => currentLinks.map((currentLink, linkIndex) => (
+                    linkIndex === index ? { ...currentLink, label: event.target.value } : currentLink
+                  )))}
+                  placeholder="e.g. Official website"
+                />
+                <input
+                  aria-label={`Link ${index + 1} URL`}
+                  type="url"
+                  pattern="https?://.+"
+                  title="Use a web address starting with http:// or https://."
+                  required
+                  value={link.url}
+                  onChange={(event) => setResourceLinks((currentLinks) => currentLinks.map((currentLink, linkIndex) => (
+                    linkIndex === index ? { ...currentLink, url: event.target.value } : currentLink
+                  )))}
+                  placeholder="https://example.com"
+                />
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setResourceLinks((currentLinks) => currentLinks.filter((_, linkIndex) => linkIndex !== index))}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => setResourceLinks((currentLinks) => [...currentLinks, { label: '', url: '' }])}
+            >
+              + Add information link
+            </button>
+          </fieldset>
+        </div>
       </div>
       <div className="schedule-item-actions">
         {activity && onRemove && <button className="text-button unschedule-button" type="button" onClick={onRemove}>Remove activity</button>}
+        {!staged && activity && onStage && <button className="text-button unschedule-button" type="button" onClick={onStage}>Move to staging area</button>}
         <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
         <button
           className="primary-button"
           type="submit"
-          disabled={!title.trim() || (!activity && selectedDayNumbers.length === 0)}
+          disabled={!title.trim() || (!staged && !activity && selectedDayNumbers.length === 0)}
         >
-          Save activity
+          {staged ? 'Save staged idea' : 'Save activity'}
         </button>
       </div>
     </form>

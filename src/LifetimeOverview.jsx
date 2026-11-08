@@ -54,6 +54,56 @@ function LimitMeter({ label, actual, limit, format }) {
   )
 }
 
+function YearPlanningSummary({ year, plan, plannedCost, plannedPto, onUpdatePlan }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const detailsId = `year-planning-details-${year}`
+
+  return (
+    <div className={`year-planning-summary${isOpen ? ' year-planning-summary-open' : ''}`}>
+      <button
+        className="year-planning-summary-toggle"
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls={detailsId}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <span>Budget &amp; vacation days</span>
+        <span className="year-planning-summary-chevron" aria-hidden="true" />
+      </button>
+      <div className="year-planning-summary-details" id={detailsId}>
+        <div className="annual-limits">
+          <label>
+            <span>Travel budget</span>
+            <AnnualPlanNumberField
+              key={`${year}-travelBudget-${plan.travelBudget}`}
+              year={year}
+              field="travelBudget"
+              value={plan.travelBudget}
+              ariaLabel={`${year} travel budget`}
+              prefix="$"
+              onUpdatePlan={onUpdatePlan}
+            />
+          </label>
+          <label>
+            <span>Vacation days</span>
+            <AnnualPlanNumberField
+              key={`${year}-vacationDays-${plan.vacationDays}`}
+              year={year}
+              field="vacationDays"
+              value={plan.vacationDays}
+              ariaLabel={`${year} vacation days`}
+              suffix={<small>days</small>}
+              onUpdatePlan={onUpdatePlan}
+            />
+          </label>
+        </div>
+        <LimitMeter label="Trip costs" actual={plannedCost} limit={plan.travelBudget} format={currency.format} />
+        <LimitMeter label="Time off" actual={plannedPto} limit={plan.vacationDays} format={(value) => `${value} days`} />
+      </div>
+    </div>
+  )
+}
+
 function AnnualPlanNumberField({ year, field, value, ariaLabel, prefix, suffix, onUpdatePlan }) {
   const [draft, setDraft] = useState(String(value))
 
@@ -389,36 +439,13 @@ function LifetimeOverview({
                 <header className="year-column-header">
                   <div><h3>{year}</h3><span>{yearTrips.length} {yearTrips.length === 1 ? 'trip' : 'trips'}</span></div>
                 </header>
-                <div className="year-planning-summary">
-                  <div className="annual-limits">
-                    <label>
-                      <span>Travel budget</span>
-                      <AnnualPlanNumberField
-                        key={`${year}-travelBudget-${plan.travelBudget}`}
-                        year={year}
-                        field="travelBudget"
-                        value={plan.travelBudget}
-                        ariaLabel={`${year} travel budget`}
-                        prefix="$"
-                        onUpdatePlan={onUpdatePlan}
-                      />
-                    </label>
-                    <label>
-                      <span>Vacation days</span>
-                      <AnnualPlanNumberField
-                        key={`${year}-vacationDays-${plan.vacationDays}`}
-                        year={year}
-                        field="vacationDays"
-                        value={plan.vacationDays}
-                        ariaLabel={`${year} vacation days`}
-                        suffix={<small>days</small>}
-                        onUpdatePlan={onUpdatePlan}
-                      />
-                    </label>
-                  </div>
-                  <LimitMeter label="Trip costs" actual={plannedCost} limit={plan.travelBudget} format={currency.format} />
-                  <LimitMeter label="Time off" actual={plannedPto} limit={plan.vacationDays} format={(value) => `${value} days`} />
-                </div>
+                <YearPlanningSummary
+                  year={year}
+                  plan={plan}
+                  plannedCost={plannedCost}
+                  plannedPto={plannedPto}
+                  onUpdatePlan={onUpdatePlan}
+                />
                 <div className="year-trip-list">
                   {yearTrips.length > 0
                     ? yearTrips.map((trip) => (

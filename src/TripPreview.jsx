@@ -10,6 +10,69 @@ import './TripPreview.css'
 const TripCalendar = lazy(() => import('./TripCalendar.jsx'))
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
+function getWebUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return ''
+  try {
+    const url = new URL(value.trim())
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : ''
+  } catch {
+    return ''
+  }
+}
+
+function getActivityLinks(activity) {
+  return (Array.isArray(activity.links) ? activity.links : [])
+    .flatMap((link) => {
+      const url = getWebUrl(link?.url)
+      return url
+        ? [{ url, label: typeof link.label === 'string' && link.label.trim() ? link.label.trim() : url }]
+        : []
+    })
+}
+
+function ActivityImage({ activity }) {
+  const imageUrl = getWebUrl(activity.imageUrl)
+  if (!imageUrl) return null
+  return (
+    <a
+      className="activity-resource-image-link"
+      href={imageUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Open image for ${activity.title}`}
+    >
+      <img src={imageUrl} alt={`${activity.title} preview`} loading="lazy" />
+    </a>
+  )
+}
+
+function ActivityLinks({ activity }) {
+  const links = getActivityLinks(activity)
+  if (links.length === 0) return null
+  return (
+    <ul className="activity-resource-links">
+      {links.map((link, index) => (
+        <li key={`${link.url}-${index}`}>
+          <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function ActivityResources({ activity }) {
+  const imageUrl = getWebUrl(activity.imageUrl)
+  const links = getActivityLinks(activity)
+  if (!imageUrl && links.length === 0) return null
+
+  return (
+    <div className="activity-resource-details">
+      {imageUrl && <ActivityImage activity={activity} />}
+      {links.length > 0 && <ActivityLinks activity={activity} />}
+    </div>
+  )
+}
+
 function getTripCalendarDays(trip) {
   const dayCount = Math.max(1, trip.tripDays ?? trip.days ?? 1)
   const year = Number.isInteger(trip.year) ? trip.year : new Date().getFullYear()
@@ -104,6 +167,7 @@ function TripPreview({
   const [isWishListPanelOpen, setIsWishListPanelOpen] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [editingActivityId, setEditingActivityId] = useState(null)
+  const [activityFormMode, setActivityFormMode] = useState('scheduled')
   const [mapView, setMapView] = useState('overview')
   const [travelTimeEvents, setTravelTimeEvents] = useState([])
   const [travelTimeError, setTravelTimeError] = useState('')
@@ -155,10 +219,12 @@ function TripPreview({
           coordinates: trip.coordinates,
         }]
     const activityMarkers = tripActivities.flatMap((activity, index) => {
-      const time = [
-        activity.dayNumber ? `Day ${activity.dayNumber}` : '',
-        activity.time,
-      ].filter(Boolean).join(' · ')
+      const time = activity.staged
+        ? 'Staged idea'
+        : [
+            activity.dayNumber ? `Day ${activity.dayNumber}` : '',
+            activity.time,
+          ].filter(Boolean).join(' · ')
       const createMarker = (suffix, place, locationDetails, coordinates) => coordinates && ({
         id: `activity-${activity.id ?? index}-${suffix}`,
         title: activity.title,
@@ -220,7 +286,9 @@ function TripPreview({
       type: 'Wish-list idea',
       kind: 'idea',
     })),
-    ...tripActivities.map((activity) => ({ ...activity, kind: 'activity' })),
+    ...tripActivities
+      .filter((activity) => !activity.staged)
+      .map((activity) => ({ ...activity, kind: 'activity' })),
   ].sort((first, second) => first.dayNumber - second.dayNumber || first.time.localeCompare(second.time)), [
     scheduledItems,
     tripActivities,
@@ -558,6 +626,7 @@ function TripPreview({
 
   const unscheduledItems = tripExperiences.filter((item) => !item.schedule)
   const availableIdeas = wishlist.filter((item) => !item.tripId)
+  const stagedActivities = tripActivities.filter((activity) => activity.staged)
   const scheduleDays = [...new Set(scheduledEntries.map((item) => item.dayNumber))]
   const activeRouteDayNumber = mapView === 'overview'
     ? 1
@@ -714,6 +783,7 @@ function TripPreview({
       if (activity) {
         onSaveActivity(trip.id, {
           ...activity,
+          staged: false,
           dayNumber: schedule.dayNumber,
           time: schedule.time,
           durationMinutes: schedule.durationMinutes,
@@ -735,6 +805,7 @@ function TripPreview({
     if (info.event.extendedProps.kind === 'activity') {
       setIsAddingActivity(false)
       setEditingActivityId(info.event.id)
+      setActivityFormMode('scheduled')
       setSchedulingItemId(null)
       setScheduleView('calendar')
       return
@@ -970,14 +1041,55 @@ function TripPreview({
           <div className="trip-ideas-heading-actions">
             <span>{scheduledEntries.length} {scheduledEntries.length === 1 ? 'scheduled item' : 'scheduled items'}</span>
             {canEdit && (
-              <button className="secondary-button" type="button" onClick={() => {
-                setIsAddingActivity((isOpen) => !isOpen)
-                setEditingActivityId(null)
-              }}>
-                {isAddingActivity ? 'Close form' : '+ Add activity'}
-              </button>
+              <>
+                <button className="secondary-button" type="button" onClick={() => {
+                  setIsAddingActivity(!(isAddingActivity && activityFormMode === 'scheduled'))
+                  setActivityFormMode('scheduled')
+                  setEditingActivityId(null)
+                }}>
+                  {isAddingActivity && activityFormMode === 'scheduled' ? 'Close form' : '+ Add activity'}
+                </button>
+                <button className="secondary-button" type="button" onClick={() => {
+                  setIsAddingActivity(!(isAddingActivity && activityFormMode === 'staged'))
+                  setActivityFormMode('staged')
+                  setEditingActivityId(null)
+                }}>
+                  {isAddingActivity && activityFormMode === 'staged' ? 'Close form' : '+ Stage an idea'}
+                </button>
+              </>
             )}
           </div>
+        </div>
+        <div className="trip-staged-activities">
+          <div className="trip-staged-heading">
+            <h3>Staging area</h3>
+            <span>{stagedActivities.length} waiting to be scheduled</span>
+          </div>
+          {stagedActivities.length > 0
+            ? stagedActivities.map((activity) => (
+              <article className="trip-staged-activity" key={activity.id}>
+                <div>
+                  <strong>{activity.title}</strong>
+                  <span>{activity.place || activity.type} · {formatDuration(activity.durationMinutes)}</span>
+                  <ActivityResources activity={activity} />
+                </div>
+                {canEdit && (
+                  <div className="trip-staged-actions">
+                    <button className="primary-button" type="button" onClick={() => {
+                      setIsAddingActivity(false)
+                      setEditingActivityId(activity.id)
+                      setActivityFormMode('scheduled')
+                    }}>Schedule</button>
+                    <button className="text-button" type="button" onClick={() => {
+                      setIsAddingActivity(false)
+                      setEditingActivityId(activity.id)
+                      setActivityFormMode('staged')
+                    }}>Edit</button>
+                  </div>
+                )}
+              </article>
+            ))
+            : <p className="trip-staged-empty">Keep flexible ideas here until you’re ready to choose a day and time.</p>}
         </div>
         <div className="trip-preview-schedule-tabs" role="tablist" aria-label="Trip schedule format">
           <button type="button" role="tab" aria-selected={scheduleView === 'calendar'} className={scheduleView === 'calendar' ? 'selected' : ''} onClick={() => setScheduleView('calendar')}>Calendar</button>
@@ -1111,16 +1223,29 @@ function TripPreview({
             key={editingActivity?.id ?? 'new'}
             activity={editingActivity}
             tripDays={calendarDays.length}
+            staged={activityFormMode === 'staged'}
             onCancel={() => {
               setIsAddingActivity(false)
               setEditingActivityId(null)
             }}
+            onStage={editingActivity && activityFormMode === 'scheduled' ? () => {
+              onSaveActivity(trip.id, { ...editingActivity, staged: true })
+              setEditingActivityId(null)
+            } : undefined}
             onRemove={editingActivity ? () => {
               onRemoveActivity(trip.id, editingActivity.id)
               setEditingActivityId(null)
             } : undefined}
             onSave={(activity, dayNumbers) => {
-              onSaveActivities(trip.id, dayNumbers.map((dayNumber) => ({ ...activity, dayNumber })))
+              if (activityFormMode === 'staged') {
+                onSaveActivities(trip.id, [{ ...activity, staged: true }])
+              } else {
+                onSaveActivities(trip.id, dayNumbers.map((dayNumber) => ({
+                  ...activity,
+                  dayNumber,
+                  staged: false,
+                })))
+              }
               setIsAddingActivity(false)
               setEditingActivityId(null)
             }}
@@ -1135,6 +1260,7 @@ function TripPreview({
                 events={allCalendarEvents}
                 eventAllow={canEdit ? allowScheduleEventDrop : () => false}
                 dayLabelsOnly
+                showDayDates={Boolean(trip.startDateISO)}
                 onEventDrop={updateScheduledTime}
                 onEventResize={updateScheduledTime}
                 onEventClick={handleScheduleEventClick}
@@ -1150,7 +1276,12 @@ function TripPreview({
                   {scheduledEntries.filter((item) => item.dayNumber === dayNumber).map((item) => (
                     <article key={item.id}>
                       <time>{formatTime(item.time)}</time>
-                      <div><h4>{item.title}</h4><p>{item.place || item.type} · {formatDuration(item.durationMinutes)}</p></div>
+                      <div>
+                        {item.kind === 'activity' && <ActivityImage activity={item} />}
+                        <h4>{item.title}</h4>
+                        <p>{item.place || item.type} · {formatDuration(item.durationMinutes)}</p>
+                        {item.kind === 'activity' && <ActivityLinks activity={item} />}
+                      </div>
                       <strong>{currency.format(item.cost)}</strong>
                     </article>
                   ))}

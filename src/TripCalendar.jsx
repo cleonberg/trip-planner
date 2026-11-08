@@ -2,7 +2,18 @@ import FullCalendar from '@fullcalendar/react'
 import interactionPlugin from '@fullcalendar/interaction'
 import timeGridPlugin from '@fullcalendar/timegrid'
 
-function TripCalendar({ days, events, eventAllow, onEventDrop, onEventResize, onEventClick, dayLabelsOnly = false }) {
+const shortDateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
+
+function TripCalendar({
+  days,
+  events,
+  eventAllow,
+  onEventDrop,
+  onEventResize,
+  onEventClick,
+  dayLabelsOnly = false,
+  showDayDates = false,
+}) {
   const views = {
     tripSchedule: {
       type: 'timeGrid',
@@ -12,8 +23,19 @@ function TripCalendar({ days, events, eventAllow, onEventDrop, onEventResize, on
   const dayHeaderContent = dayLabelsOnly
     ? ({ date }) => {
         const dateISO = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-        return days.find((day) => day.dateISO === dateISO)?.label ?? ''
-      }
+      const day = days.find((candidate) => candidate.dateISO === dateISO)
+      if (!day) return ''
+      return (
+        <span className="trip-calendar-day-header">
+          <strong>{day.label}</strong>
+          {showDayDates && (
+            <time dateTime={day.dateISO}>
+              {shortDateFormatter.format(date)}
+            </time>
+          )}
+        </span>
+      )
+    }
     : undefined
 
   return (

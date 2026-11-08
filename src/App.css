@@ -1932,6 +1932,14 @@
   background: #f5f8f4;
 }
 
+.year-planning-summary-toggle {
+  display: none;
+}
+
+.year-planning-summary-details {
+  min-width: 0;
+}
+
 .year-planning-summary .annual-limits {
   margin-bottom: 13px;
 }
@@ -2712,8 +2720,30 @@
 }
 
 .trip-schedule-events article > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 10px;
   min-width: 0;
   flex: 1;
+}
+
+.trip-schedule-events article > div > h4,
+.trip-schedule-events article > div > p {
+  grid-column: 1;
+}
+
+.trip-schedule-events article > div > .activity-resource-image-link {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  justify-self: end;
+}
+
+.trip-schedule-events article > div > .activity-resource-links {
+  grid-column: 1;
+  grid-row: 3;
+  max-width: 100%;
+  margin-top: 0;
 }
 
 .trip-schedule-events h4 {
@@ -2995,6 +3025,52 @@
 
   .year-planning-summary {
     padding: 11px;
+  }
+
+  .year-planning-summary-toggle {
+    display: flex;
+    width: 100%;
+    min-height: 34px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #53665a;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .year-planning-summary-chevron {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform .15s ease;
+  }
+
+  .year-planning-summary-open .year-planning-summary-chevron {
+    transform: rotate(225deg) translate(-2px, -1px);
+  }
+
+  .year-planning-summary:not(.year-planning-summary-open) {
+    padding: 0 11px;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .year-planning-summary:not(.year-planning-summary-open) .year-planning-summary-details {
+    display: none;
+  }
+
+  .year-planning-summary-open .year-planning-summary-details {
+    padding: 8px 0 2px;
   }
 
   .lifetime-trip-card {

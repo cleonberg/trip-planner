@@ -372,7 +372,9 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
   const selectedTrip = trips.find((trip) => trip.id === selectedTripId) ?? trips[0]
   const minimumTripDays = Math.max(
     selectedTrip?.activities?.reduce(
-      (minimum, activity) => Math.max(minimum, activity.dayNumber),
+      (minimum, activity) => activity.staged
+        ? minimum
+        : Math.max(minimum, activity.dayNumber ?? 1),
       1,
     ) ?? 1,
     wishlistItems.reduce((minimum, item) => (
@@ -1214,7 +1216,9 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
           <TripPreview
             key={`shared-${selectedSharedTrip.ownerUid}-${selectedSharedTrip.tripId}`}
             trip={sharedTrip}
-            minTripDays={Math.max(1, ...(sharedTrip.activities ?? []).map((activity) => activity.dayNumber ?? 1))}
+            minTripDays={Math.max(1, ...(sharedTrip.activities ?? [])
+              .filter((activity) => !activity.staged)
+              .map((activity) => activity.dayNumber ?? 1))}
             wishlist={[]}
             trips={[sharedTrip]}
             onBack={() => setCurrentView('shared')}
