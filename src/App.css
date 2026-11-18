@@ -1656,6 +1656,104 @@
   border-radius: 0;
 }
 
+.home-locations-editor {
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px solid #edf1ed;
+}
+
+.home-locations-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  list-style: none;
+  cursor: pointer;
+}
+
+.home-locations-heading::-webkit-details-marker {
+  display: none;
+}
+
+.home-locations-heading h3 {
+  margin: 0;
+  color: #3b4e42;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.home-locations-heading p {
+  margin: 4px 0 0;
+  color: #929d95;
+  font-size: 11px;
+}
+
+.home-location-chevron {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  border-right: 1.5px solid #87938a;
+  border-bottom: 1.5px solid #87938a;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.home-location-disclosure[open] .home-location-chevron {
+  transform: rotate(225deg);
+}
+
+.home-location-content {
+  margin-top: 12px;
+}
+
+.home-locations-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.home-locations-actions p {
+  margin: 0;
+  color: #929d95;
+  font-size: 11px;
+}
+
+.home-locations-actions .secondary-button {
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.home-location-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid #e8ece8;
+  border-radius: 7px;
+  background: #f7f9f6;
+}
+
+.home-location-form .trip-form-actions {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.home-location-list {
+  margin-top: 12px;
+}
+
+.trip-stop-list li .home-location-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .map-toolbar {
   display: flex;
   align-items: center;
@@ -1719,6 +1817,168 @@
   border-radius: 50%;
 }
 
+.map-filter-button .map-filter-star {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent !important;
+  color: #c69a2b;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.map-year-filter {
+  display: grid;
+  flex-basis: 100%;
+  gap: 7px;
+  padding: 8px 8px 2px;
+  border-top: 1px solid #edf1ed;
+}
+
+.map-year-filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #53665a;
+  font-size: 10px;
+}
+
+.map-year-filter-heading strong {
+  color: #30483a;
+  font-weight: 700;
+}
+
+.map-year-filter-heading button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #52715e;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.map-year-filter-heading button:hover {
+  text-decoration: underline;
+}
+
+.map-year-dual-slider {
+  position: relative;
+  height: 22px;
+  margin: 0 7px;
+}
+
+.map-year-slider-track,
+.map-year-slider-selection {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  border-radius: 4px;
+  transform: translateY(-50%);
+}
+
+.map-year-slider-track {
+  right: 0;
+  left: 0;
+  background: #dfe6df;
+}
+
+.map-year-slider-selection {
+  background: #73947a;
+}
+
+.map-year-slider-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.map-year-slider-start {
+  z-index: 3;
+}
+
+.map-year-slider-end {
+  z-index: 2;
+}
+
+.map-year-slider-input.active {
+  z-index: 4;
+}
+
+.map-year-slider-input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.map-year-slider-input::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  appearance: none;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #52715e;
+  box-shadow: 0 1px 3px rgb(34 54 39 / 35%);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.map-year-slider-input::-moz-range-track {
+  height: 4px;
+  border: 0;
+  background: transparent;
+}
+
+.map-year-slider-input::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #52715e;
+  box-shadow: 0 1px 3px rgb(34 54 39 / 35%);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.map-year-slider-input:focus-visible::-webkit-slider-thumb,
+.map-year-slider-input:focus-visible::-moz-range-thumb {
+  outline: 2px solid #80a18b;
+  outline-offset: 2px;
+}
+
+.map-year-slider-input:disabled::-webkit-slider-thumb,
+.map-year-slider-input:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.map-year-filter > p {
+  margin: 0;
+  color: #929d95;
+  font-size: 9px;
+}
+
+.home-map-star-marker {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+}
+
+.home-map-star-marker span {
+  color: #c69a2b;
+  font-size: 24px;
+  line-height: 1;
+  text-shadow: -1px -1px #fff, 1px -1px #fff, -1px 1px #fff, 1px 1px #fff;
+}
+
 .map-tool-error {
   flex-basis: 100%;
   color: #985b4e;
@@ -1751,6 +2011,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.legend-home {
+  color: #c69a2b;
+  font-size: 14px;
+  line-height: 8px;
 }
 
 .legend-dot {
@@ -1866,6 +2132,7 @@
 }
 
 .year-column {
+  --year-compact-panel-height: 168px;
   display: grid;
   grid-template-areas:
     "header header"
@@ -1926,6 +2193,8 @@
 .year-planning-summary {
   grid-area: summary;
   min-width: 0;
+  min-height: var(--year-compact-panel-height);
+  box-sizing: border-box;
   padding: 12px;
   border: 1px solid #e8eee8;
   border-radius: 9px;
@@ -1933,11 +2202,29 @@
 }
 
 .year-planning-summary-toggle {
-  display: none;
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #53665a;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
 }
 
 .year-planning-summary-details {
   min-width: 0;
+}
+
+.year-planning-summary-open .year-planning-summary-details {
+  padding-top: 8px;
 }
 
 .year-planning-summary .annual-limits {
@@ -1945,7 +2232,7 @@
 }
 
 .year-planning-summary .limit-meter {
-  margin: 12px 0;
+  margin: 8px 0;
 }
 
 .annual-limits label {
@@ -2074,10 +2361,11 @@
   display: flex;
   width: 100%;
   max-width: 420px;
-  min-height: 198px;
+  height: var(--year-compact-panel-height);
+  min-height: var(--year-compact-panel-height);
   box-sizing: border-box;
   flex-direction: column;
-  padding: 15px;
+  padding: 10px;
   border: 1px solid #e0e8e0;
   border-left: 3px solid #8eaa91;
   border-radius: 9px;
@@ -2161,11 +2449,10 @@
 
 .lifetime-trip-card h3 {
   display: -webkit-box;
-  min-height: 42px;
-  max-height: 42px;
+  max-height: 40px;
   overflow: hidden;
-  font-size: 18px;
-  margin: 10px 0 5px;
+  font-size: 16px;
+  margin: 4px 0 0;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -2179,7 +2466,7 @@
 
 .trip-card-location {
   display: -webkit-box;
-  min-height: 26px;
+  min-height: 12px;
   overflow: hidden;
   line-height: 1.35;
   -webkit-box-orient: vertical;
@@ -2223,15 +2510,14 @@
 
 .lifetime-trip-card .trip-card-stats {
   display: grid;
-  min-height: 38px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 12px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 5px 8px;
-  margin: auto 0 10px;
+  gap: 4px 8px;
+  margin: auto 0 4px;
 }
 
 .lifetime-trip-card .trip-card-stats strong {
-  grid-column: 1 / -1;
   justify-self: end;
 }
 
@@ -2253,7 +2539,7 @@
 }
 
 .lifetime-trip-card .text-button {
-  padding-top: 10px;
+  padding-top: 5px;
   border-top: 1px solid #edf1ed;
 }
 
@@ -3059,18 +3345,8 @@
     transform: rotate(225deg) translate(-2px, -1px);
   }
 
-  .year-planning-summary:not(.year-planning-summary-open) {
-    padding: 0 11px;
-    border-color: transparent;
-    background: transparent;
-  }
-
-  .year-planning-summary:not(.year-planning-summary-open) .year-planning-summary-details {
-    display: none;
-  }
-
   .year-planning-summary-open .year-planning-summary-details {
-    padding: 8px 0 2px;
+    padding-top: 8px;
   }
 
   .lifetime-trip-card {

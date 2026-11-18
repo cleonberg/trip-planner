@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
+import { divIcon } from 'leaflet'
+import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
 const DEFAULT_CENTER = [37.745, -119.593]
+const HOME_LOCATION_ICON = divIcon({
+  className: 'home-map-star-marker',
+  html: '<span aria-hidden="true">★</span>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+})
 const MAP_FILTERS = [
   { id: 'planned', label: 'Planned', color: '#2563eb' },
   { id: 'visited', label: 'Visited', color: '#2e7d32' },
   { id: 'wishlist', label: 'Unassigned wish list', color: '#e27a21' },
+  { id: 'home', label: 'Home', color: '#c69a2b', icon: '★' },
 ]
 
 function MapViewport({ points, selectedLocation, initialCenter }) {
@@ -90,9 +98,28 @@ function MapInstanceBridge({ onMapReady }) {
   return null
 }
 
-function MapToolbar({ map, points, mapLayer, onToggleLayer, mapFilters, onMapFilterChange }) {
+function MapToolbar({
+  map,
+  points,
+  mapLayer,
+  onToggleLayer,
+  mapFilters,
+  onMapFilterChange,
+  yearRange,
+  yearBounds,
+  onYearRangeChange,
+  onYearRangeReset,
+}) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [toolError, setToolError] = useState('')
+  const [activeYearThumb, setActiveYearThumb] = useState('end')
+  const yearSpan = yearBounds ? yearBounds.end - yearBounds.start : 0
+  const startPosition = yearSpan > 0
+    ? ((yearRange.start - yearBounds.start) / yearSpan) * 100
+    : 0
+  const endPosition = yearSpan > 0
+    ? ((yearRange.end - yearBounds.start) / yearSpan) * 100
+    : 100
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -151,11 +178,61 @@ function MapToolbar({ map, points, mapLayer, onToggleLayer, mapFilters, onMapFil
             aria-pressed={mapFilters[filter.id]}
             onClick={() => onMapFilterChange(filter.id)}
           >
-            <i style={{ backgroundColor: filter.color }} />
+            {filter.icon
+              ? <i className="map-filter-star" aria-hidden="true">{filter.icon}</i>
+              : <i style={{ backgroundColor: filter.color }} />}
             {filter.label}
           </button>
         ))}
       </div>
+      {yearRange && yearBounds && onYearRangeChange && (
+        <div className="map-year-filter" role="group" aria-label="Filter map markers by year">
+          <div className="map-year-filter-heading">
+            <span>Years shown: <strong>{yearRange.start}–{yearRange.end}</strong></span>
+            {(yearRange.start !== yearBounds.start || yearRange.end !== yearBounds.end) && (
+              <button type="button" onClick={onYearRangeReset}>Reset</button>
+            )}
+          </div>
+          <div className="map-year-dual-slider">
+            <div className="map-year-slider-track" />
+            <div
+              className="map-year-slider-selection"
+              style={{ left: `${startPosition}%`, right: `${100 - endPosition}%` }}
+            />
+            <input
+              className={`map-year-slider-input map-year-slider-start${activeYearThumb === 'start' ? ' active' : ''}`}
+              type="range"
+              min={yearBounds.start}
+              max={yearBounds.end}
+              value={yearRange.start}
+              aria-label="First year shown"
+              aria-valuetext={`From ${yearRange.start}`}
+              disabled={yearBounds.start === yearBounds.end}
+              onPointerDown={() => setActiveYearThumb('start')}
+              onChange={(event) => {
+                const start = Number(event.target.value)
+                onYearRangeChange({ start: Math.min(start, yearRange.end), end: yearRange.end })
+              }}
+            />
+            <input
+              className={`map-year-slider-input map-year-slider-end${activeYearThumb === 'end' ? ' active' : ''}`}
+              type="range"
+              min={yearBounds.start}
+              max={yearBounds.end}
+              value={yearRange.end}
+              aria-label="Last year shown"
+              aria-valuetext={`Through ${yearRange.end}`}
+              disabled={yearBounds.start === yearBounds.end}
+              onPointerDown={() => setActiveYearThumb('end')}
+              onChange={(event) => {
+                const end = Number(event.target.value)
+                onYearRangeChange({ start: yearRange.start, end: Math.max(end, yearRange.start) })
+              }}
+            />
+          </div>
+          <p>Undated home and unassigned wish-list places stay visible.</p>
+        </div>
+      )}
       {toolError && <span className="map-tool-error" role="alert">{toolError}</span>}
     </div>
   )
@@ -174,6 +251,10 @@ function TripMap({
   fitActivities,
   mapFilters = {},
   onMapFilterChange,
+  yearRange,
+  yearBounds,
+  onYearRangeChange,
+  onYearRangeReset,
 }) {
   const [mapLayer, setMapLayer] = useState('street')
   const [mapInstance, setMapInstance] = useState(null)
@@ -220,6 +301,10 @@ function TripMap({
           onToggleLayer={() => setMapLayer((currentLayer) => currentLayer === 'street' ? 'satellite' : 'street')}
           mapFilters={mapFilters}
           onMapFilterChange={onMapFilterChange}
+          yearRange={yearRange}
+          yearBounds={yearBounds}
+          onYearRangeChange={onYearRangeChange}
+          onYearRangeReset={onYearRangeReset}
         />
       )}
       <MapContainer
@@ -250,22 +335,36 @@ function TripMap({
           />
         ))}
         {activities.map((activity, index) => activity.coordinates && (
-          <CircleMarker
-            center={[activity.coordinates.lat, activity.coordinates.lng]}
-            key={activity.id ?? `${activity.time}-${activity.title}-${index}`}
-            pathOptions={{ color: '#fff', fillColor: activity.mapColor ?? markerColors[activity.mapStatus] ?? '#315a49', fillOpacity: 1, weight: 3 }}
-            radius={activity.mapRadius ?? 9}
-            eventHandlers={activity.tripId && onTripMarkerClick
-              ? { click: () => onTripMarkerClick(activity.tripId) }
-              : undefined}
-          >
-            <Tooltip>
-              <strong>{activity.title}</strong><br />
-              {activity.time}<br />
-              {activity.place}
-              {activity.locationDetails && <><br />{activity.locationDetails}</>}
-            </Tooltip>
-          </CircleMarker>
+          activity.mapMarker === 'star'
+            ? <Marker
+              position={[activity.coordinates.lat, activity.coordinates.lng]}
+              key={activity.id ?? `${activity.time}-${activity.title}-${index}`}
+              icon={HOME_LOCATION_ICON}
+              title={activity.title}
+            >
+              <Tooltip>
+                <strong>{activity.title}</strong><br />
+                {activity.time}
+                {activity.place && <><br />{activity.place}</>}
+                {activity.locationDetails && <><br />{activity.locationDetails}</>}
+              </Tooltip>
+            </Marker>
+            : <CircleMarker
+              center={[activity.coordinates.lat, activity.coordinates.lng]}
+              key={activity.id ?? `${activity.time}-${activity.title}-${index}`}
+              pathOptions={{ color: '#fff', fillColor: activity.mapColor ?? markerColors[activity.mapStatus] ?? '#315a49', fillOpacity: 1, weight: 3 }}
+              radius={activity.mapRadius ?? 9}
+              eventHandlers={activity.tripId && onTripMarkerClick
+                ? { click: () => onTripMarkerClick(activity.tripId) }
+                : undefined}
+            >
+              <Tooltip>
+                <strong>{activity.title}</strong><br />
+                {activity.time}<br />
+                {activity.place}
+                {activity.locationDetails && <><br />{activity.locationDetails}</>}
+              </Tooltip>
+            </CircleMarker>
         ))}
         {selectedLocation && (
           <CircleMarker

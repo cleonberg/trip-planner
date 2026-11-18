@@ -154,3 +154,17 @@ test('family contacts and the other app collections remain private to their owne
   await assertSucceeds(getDoc(doc(firestoreFor('owner-uid'), 'users', 'owner-uid', 'familyMembers', 'family-1')))
   await assertFails(getDoc(doc(firestoreFor('viewer-uid'), 'users', 'owner-uid', 'familyMembers', 'family-1')))
 })
+
+test('home locations are private to their owner', async () => {
+  const ownerHome = doc(firestoreFor('owner-uid'), 'users', 'owner-uid', 'homeLocations', 'home-1')
+  await assertSucceeds(setDoc(ownerHome, {
+    name: 'Springfield',
+    coordinates: { lat: 39.8, lng: -89.6 },
+  }))
+  await assertSucceeds(getDoc(ownerHome))
+  await assertFails(getDoc(doc(firestoreFor('viewer-uid'), 'users', 'owner-uid', 'homeLocations', 'home-1')))
+  await assertFails(setDoc(doc(firestoreFor('viewer-uid'), 'users', 'owner-uid', 'homeLocations', 'forged-home'), {
+    name: 'Not theirs',
+    coordinates: { lat: 0, lng: 0 },
+  }))
+})

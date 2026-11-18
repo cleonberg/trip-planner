@@ -39,6 +39,7 @@ function TripDetailsForm({ trip, minTripDays = 1, onSave, onCancel }) {
       coordinates: trip.coordinates ?? null,
     }]
   })
+  const [status, setStatus] = useState(trip.status ?? 'Idea')
   const [year, setYear] = useState(String(trip.year))
   const [startDateISO, setStartDateISO] = useState(trip.startDateISO ?? '')
   const [tripDays, setTripDays] = useState(String(trip.tripDays ?? trip.days ?? 1))
@@ -83,6 +84,7 @@ function TripDetailsForm({ trip, minTripDays = 1, onSave, onCancel }) {
       locationDetails: stops.map((stop) => stop.details).filter(Boolean).join(' · '),
       coordinates: stops[0]?.coordinates ?? null,
       stops,
+      status,
       year: Number(year),
       dates: startDateISO
         ? formatTripDateRange(startDateISO, Number(tripDays))
@@ -111,6 +113,14 @@ function TripDetailsForm({ trip, minTripDays = 1, onSave, onCancel }) {
         <label className="form-field">
           <span>Planning year</span>
           <input required type="number" min="1900" max={currentYear + 59} value={year} onChange={(event) => changeYear(event.target.value)} />
+        </label>
+        <label className="form-field">
+          <span>Status</span>
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option>Visited</option>
+            <option>Planning</option>
+            <option>Idea</option>
+          </select>
         </label>
         <label className="form-field">
           <span>Exact start date (optional)</span>

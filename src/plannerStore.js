@@ -6,6 +6,7 @@ function getCollections(userId) {
     trips: collection(db, 'users', userId, 'trips'),
     annualPlans: collection(db, 'users', userId, 'annualPlans'),
     wishlistItems: collection(db, 'users', userId, 'wishlistItems'),
+    homeLocations: collection(db, 'users', userId, 'homeLocations'),
     days: collection(db, 'users', userId, 'trips', 'yosemite', 'days'),
   }
 }
@@ -28,7 +29,7 @@ async function ensureOwnerMembership(userId, tripId) {
 
 export async function loadPlannerData(userId) {
   const collections = getCollections(userId)
-  const [trips, annualPlans, wishlistItems, days] = await Promise.all(
+  const [trips, annualPlans, wishlistItems, homeLocations, days] = await Promise.all(
     Object.values(collections).map((reference) => getDocs(reference)),
   )
   const loadedTrips = toItems(trips)
@@ -38,6 +39,7 @@ export async function loadPlannerData(userId) {
     trips: loadedTrips,
     annualPlans: toItems(annualPlans),
     wishlistItems: toItems(wishlistItems),
+    homeLocations: toItems(homeLocations),
     days: toItems(days),
   }
 }

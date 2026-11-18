@@ -91,5 +91,9 @@ service cloud.firestore {
     match /users/{userId}/annualPlans/{planId} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
+
+    match /users/{userId}/homeLocations/{locationId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
   }
 }

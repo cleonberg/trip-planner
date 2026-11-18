@@ -175,6 +175,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
   const [sharedTripError, setSharedTripError] = useState('')
   const [annualPlans, setAnnualPlans] = useState(initialAnnualPlans)
   const [wishlistItems, setWishlistItems] = useState(initialWishlist)
+  const [homeLocations, setHomeLocations] = useState([])
   const [days, setDays] = useState([])
   const [activeDayId, setActiveDayId] = useState('')
   const [isAddingActivity, setIsAddingActivity] = useState(false)
@@ -250,6 +251,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
         setIsLoadingSharedTrips(false)
         setAnnualPlans(data.annualPlans)
         setWishlistItems(data.wishlistItems)
+        setHomeLocations(data.homeLocations)
         setDays(data.days)
         setSelectedTripId(data.trips[0]?.id ?? '')
         setActiveDayId(data.days[0]?.id ?? '')
@@ -303,7 +305,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
     const timeout = setTimeout(() => {
       setSaveState('saving')
       setSaveError('')
-      const data = { trips, annualPlans, wishlistItems, days }
+      const data = { trips, annualPlans, wishlistItems, homeLocations, days }
       const pendingSave = saveQueue.current
         .catch(() => {})
         .then(async () => {
@@ -329,7 +331,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
       active = false
       clearTimeout(timeout)
     }
-  }, [user.uid, plannerLoadState, trips, annualPlans, wishlistItems, days, saveAttempt])
+  }, [user.uid, plannerLoadState, trips, annualPlans, wishlistItems, homeLocations, days, saveAttempt])
 
   useEffect(() => {
     if (sharedTripLoadState !== 'ready'
@@ -531,6 +533,20 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
     setWishlistItems((currentItems) => currentItems.map((item) => item.id === itemId ? { ...item, ...changes } : item))
   }
 
+  function addHomeLocation(homeLocation) {
+    setHomeLocations((currentLocations) => [...currentLocations, homeLocation])
+  }
+
+  function updateHomeLocation(homeLocationId, changes) {
+    setHomeLocations((currentLocations) => currentLocations.map((location) => (
+      location.id === homeLocationId ? { ...location, ...changes } : location
+    )))
+  }
+
+  function removeHomeLocation(homeLocationId) {
+    setHomeLocations((currentLocations) => currentLocations.filter((location) => location.id !== homeLocationId))
+  }
+
   function scheduleWishlistItem(itemId, schedule) {
     const item = wishlistItems.find((currentItem) => currentItem.id === itemId)
     if (!item) return
@@ -555,6 +571,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
     setSelectedTripId(trip.id)
     setCurrentView('trip')
     setIsMobileMenuOpen(false)
+    window.scrollTo(0, 0)
   }
 
   function toggleTripLock(tripId) {
@@ -983,7 +1000,7 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
         await saveSharedTrip(selectedSharedTrip.ownerUid, selectedSharedTrip.tripId, sharedTrip)
         savedSharedTrip.current = JSON.stringify(getSharedTripData(sharedTrip))
       }
-      const data = { trips, annualPlans, wishlistItems, days }
+      const data = { trips, annualPlans, wishlistItems, homeLocations, days }
       if (!savedPlannerData.current) throw new Error('Planner data has not finished loading.')
       await savePlannerData(user.uid, savedPlannerData.current, data)
       savedPlannerData.current = data
@@ -1137,11 +1154,15 @@ function PlannerApp({ user, initialView = 'lifetime' }) {
           <LifetimeOverview
             trips={trips}
             wishlist={wishlistItems}
+            homeLocations={homeLocations}
             annualPlans={annualPlans}
             onTripYearChange={changeTripYear}
             onUpdatePlan={updateAnnualPlan}
             onOpenTrip={openTrip}
             onAddTrip={addTrip}
+            onAddHomeLocation={addHomeLocation}
+            onUpdateHomeLocation={updateHomeLocation}
+            onRemoveHomeLocation={removeHomeLocation}
           />
         )}
 

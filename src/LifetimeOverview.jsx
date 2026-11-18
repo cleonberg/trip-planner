@@ -1,10 +1,18 @@
 import { useMemo, useState } from 'react'
 import TripMap from './TripMap.jsx'
+import PlaceSearchInput from './PlaceSearchInput.jsx'
 import TripStopsEditor from './TripStopsEditor.jsx'
 
 const firstPlanningYear = new Date().getFullYear()
 const planningYears = Array.from({ length: 120 }, (_, index) => firstPlanningYear - 60 + index)
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+const homeDateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+function formatHomeDateRange(startDate, endDate) {
+  if (!startDate) return 'Dates not set'
+  const formatDate = (date) => homeDateFormatter.format(new Date(`${date}T12:00:00`))
+  return `${formatDate(startDate)} – ${endDate ? formatDate(endDate) : 'Present'}`
+}
 
 function getYearPlan(annualPlans, year) {
   return annualPlans.find((plan) => plan.year === year) ?? { year, travelBudget: 0, vacationDays: 0 }
@@ -71,32 +79,34 @@ function YearPlanningSummary({ year, plan, plannedCost, plannedPto, onUpdatePlan
         <span className="year-planning-summary-chevron" aria-hidden="true" />
       </button>
       <div className="year-planning-summary-details" id={detailsId}>
-        <div className="annual-limits">
-          <label>
-            <span>Travel budget</span>
-            <AnnualPlanNumberField
-              key={`${year}-travelBudget-${plan.travelBudget}`}
-              year={year}
-              field="travelBudget"
-              value={plan.travelBudget}
-              ariaLabel={`${year} travel budget`}
-              prefix="$"
-              onUpdatePlan={onUpdatePlan}
-            />
-          </label>
-          <label>
-            <span>Vacation days</span>
-            <AnnualPlanNumberField
-              key={`${year}-vacationDays-${plan.vacationDays}`}
-              year={year}
-              field="vacationDays"
-              value={plan.vacationDays}
-              ariaLabel={`${year} vacation days`}
-              suffix={<small>days</small>}
-              onUpdatePlan={onUpdatePlan}
-            />
-          </label>
-        </div>
+        {isOpen && (
+          <div className="annual-limits">
+            <label>
+              <span>Travel budget</span>
+              <AnnualPlanNumberField
+                key={`${year}-travelBudget-${plan.travelBudget}`}
+                year={year}
+                field="travelBudget"
+                value={plan.travelBudget}
+                ariaLabel={`${year} travel budget`}
+                prefix="$"
+                onUpdatePlan={onUpdatePlan}
+              />
+            </label>
+            <label>
+              <span>Vacation days</span>
+              <AnnualPlanNumberField
+                key={`${year}-vacationDays-${plan.vacationDays}`}
+                year={year}
+                field="vacationDays"
+                value={plan.vacationDays}
+                ariaLabel={`${year} vacation days`}
+                suffix={<small>days</small>}
+                onUpdatePlan={onUpdatePlan}
+              />
+            </label>
+          </div>
+        )}
         <LimitMeter label="Trip costs" actual={plannedCost} limit={plan.travelBudget} format={currency.format} />
         <LimitMeter label="Time off" actual={plannedPto} limit={plan.vacationDays} format={(value) => `${value} days`} />
       </div>
@@ -246,22 +256,235 @@ function TripForm({ onAddTrip, onCancel }) {
   )
 }
 
+function HomeLocationsEditor({
+  homeLocations,
+  onAddHomeLocation,
+  onUpdateHomeLocation,
+  onRemoveHomeLocation,
+}) {
+  const [isAdding, setIsAdding] = useState(false)
+  const [editingHomeId, setEditingHomeId] = useState(null)
+  const [label, setLabel] = useState('')
+  const [placeQuery, setPlaceQuery] = useState('')
+  const [selectedPlace, setSelectedPlace] = useState(null)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+
+  function resetForm() {
+    setEditingHomeId(null)
+    setLabel('')
+    setPlaceQuery('')
+    setSelectedPlace(null)
+    setStartDate('')
+    setEndDate('')
+    setIsAdding(false)
+  }
+
+  function toggleAdding() {
+    if (isAdding || editingHomeId) {
+      resetForm()
+      return
+    }
+    resetForm()
+    setIsAdding(true)
+  }
+
+  function editHomeLocation(home) {
+    setIsAdding(false)
+    setEditingHomeId(home.id)
+    setLabel(home.label ?? '')
+    setPlaceQuery('')
+    setSelectedPlace(null)
+    setStartDate(home.startDate ?? '')
+    setEndDate(home.endDate ?? '')
+  }
+
+  function saveHomeLocation() {
+    if (!startDate || (endDate && endDate < startDate)) return
+    if (editingHomeId) {
+      onUpdateHomeLocation(editingHomeId, {
+        label: label.trim(),
+        startDate,
+        endDate: endDate || null,
+      })
+    } else {
+      if (!selectedPlace?.coordinates) return
+      onAddHomeLocation({
+        id: `home-${Date.now()}-${homeLocations.length}`,
+        label: label.trim(),
+        name: selectedPlace.name.trim(),
+        details: selectedPlace.details ?? '',
+        coordinates: selectedPlace.coordinates,
+        startDate,
+        endDate: endDate || null,
+      })
+    }
+    resetForm()
+  }
+
+  return (
+    <section className="home-locations-editor" aria-label="Home locations">
+      <details className="home-location-disclosure">
+        <summary className="section-heading home-locations-heading">
+          <div>
+            <h3>Home locations</h3>
+            <p>{homeLocations.length} {homeLocations.length === 1 ? 'location' : 'locations'} saved</p>
+          </div>
+          <span className="home-location-chevron" aria-hidden="true" />
+        </summary>
+        <div className="home-location-content">
+          <div className="home-locations-actions">
+            <p>Mark places you’ve lived with a star on your travel map.</p>
+            <button className="secondary-button" type="button" onClick={toggleAdding}>
+              {isAdding ? 'Cancel' : '+ Add home'}
+            </button>
+          </div>
+          {(isAdding || editingHomeId) && (
+            <div className="home-location-form">
+              <label className="form-field">
+                <span>Label (optional)</span>
+                <input
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  placeholder="e.g. Childhood home"
+                />
+              </label>
+              {isAdding && (
+                <label className="form-field">
+                  <span>Place</span>
+                  <PlaceSearchInput
+                    ariaLabel="Home location place"
+                    value={placeQuery}
+                    onChange={(value) => {
+                      setPlaceQuery(value)
+                      setSelectedPlace(null)
+                    }}
+                    onSelect={setSelectedPlace}
+                  />
+                </label>
+              )}
+              <label className="form-field">
+                <span>Start date</span>
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(event) => {
+                    const nextStartDate = event.target.value
+                    setStartDate(nextStartDate)
+                    if (endDate && endDate < nextStartDate) setEndDate('')
+                  }}
+                />
+              </label>
+              <label className="form-field">
+                <span>End date (optional)</span>
+                <input
+                  type="date"
+                  min={startDate || undefined}
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                />
+                <small className="trip-form-note">Leave blank if you still live here.</small>
+              </label>
+              <div className="trip-form-actions">
+                <button className="secondary-button" type="button" onClick={resetForm}>Cancel</button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={!startDate || (endDate && endDate < startDate) || (isAdding && !selectedPlace?.coordinates)}
+                  onClick={saveHomeLocation}
+                >
+                  {editingHomeId ? 'Save changes' : 'Add home location'}
+                </button>
+              </div>
+            </div>
+          )}
+          {homeLocations.length > 0
+            ? <ul className="trip-stop-list home-location-list">
+              {homeLocations.map((home) => (
+                <li key={home.id}>
+                  <span>
+                    <strong>{home.label || home.name}</strong>
+                    {home.label && <small>{home.name}</small>}
+                    {home.details && <small>{home.details}</small>}
+                    <small>{formatHomeDateRange(home.startDate, home.endDate)}</small>
+                  </span>
+                  <span className="home-location-actions">
+                    <button
+                      className="text-button"
+                      type="button"
+                      aria-label={`Edit home location ${home.label || home.name}`}
+                      onClick={() => editHomeLocation(home)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-button"
+                      type="button"
+                      aria-label={`Remove home location ${home.label || home.name}`}
+                      onClick={() => onRemoveHomeLocation(home.id)}
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            : <p className="trip-form-note">No home locations added yet.</p>}
+        </div>
+      </details>
+    </section>
+  )
+}
+
 function LifetimeOverview({
   trips,
   wishlist,
+  homeLocations,
   annualPlans,
   onTripYearChange,
   onUpdatePlan,
   onOpenTrip,
   onAddTrip,
+  onAddHomeLocation,
+  onUpdateHomeLocation,
+  onRemoveHomeLocation,
 }) {
   const [isAddingTrip, setIsAddingTrip] = useState(false)
   const [showPreviousYears, setShowPreviousYears] = useState(false)
-  const [mapFilters, setMapFilters] = useState({ planned: true, visited: true, wishlist: true })
-  const years = useMemo(() => [...new Set([
-    ...annualPlans.map((plan) => plan.year),
-    ...trips.map((trip) => trip.year),
-  ])].sort((a, b) => a - b), [annualPlans, trips])
+  const [mapFilters, setMapFilters] = useState({ planned: true, visited: true, wishlist: true, home: true })
+  const [selectedYearRange, setSelectedYearRange] = useState(null)
+  const mapYearBounds = useMemo(() => {
+    const tripYears = trips.map((trip) => trip.year).filter(Number.isFinite)
+    const homeYears = homeLocations.flatMap((home) => {
+      if (!home.startDate) return []
+      const startYear = Number(home.startDate.slice(0, 4))
+      const endYear = home.endDate ? Number(home.endDate.slice(0, 4)) : firstPlanningYear
+      return [startYear, endYear].filter(Number.isFinite)
+    })
+    const yearsWithDates = [...tripYears, ...homeYears]
+    if (yearsWithDates.length === 0) return null
+    return {
+      start: Math.min(...yearsWithDates),
+      end: Math.max(...yearsWithDates),
+    }
+  }, [homeLocations, trips])
+  const yearRange = useMemo(() => {
+    if (!mapYearBounds) return null
+    const start = Math.min(
+      mapYearBounds.end,
+      Math.max(mapYearBounds.start, selectedYearRange?.start ?? mapYearBounds.start),
+    )
+    const end = Math.min(
+      mapYearBounds.end,
+      Math.max(start, selectedYearRange?.end ?? mapYearBounds.end),
+    )
+    return { start, end }
+  }, [mapYearBounds, selectedYearRange])
+  const years = useMemo(
+    () => [...new Set(trips.map((trip) => trip.year))].sort((a, b) => a - b),
+    [trips],
+  )
   const previousYears = years.filter((year) => year < firstPlanningYear)
   const visibleYears = showPreviousYears
     ? years
@@ -281,7 +504,8 @@ function LifetimeOverview({
             time: `${trip.name} · ${trip.year} · ${trip.status}`,
             mapStatus: tripStatus,
             mapCategory: tripStatus,
-            mapRadius: 7,
+            year: trip.year,
+            mapRadius: 5,
             locationDetails: stop.details,
             coordinates: stop.coordinates,
           }))
@@ -295,6 +519,8 @@ function LifetimeOverview({
         time: `${trip.year} · ${trip.status}`,
         mapStatus: tripStatus,
         mapCategory: tripStatus,
+        year: trip.year,
+        mapRadius: 6,
         coordinates: trip.coordinates,
       }] : []
     }),
@@ -306,12 +532,33 @@ function LifetimeOverview({
       mapStatus: item.status.toLowerCase(),
       mapCategory: 'wishlist',
       mapColor: '#e27a21',
-      mapRadius: 12,
+      mapRadius: 8,
       locationDetails: item.details ?? item.locationDetails,
       coordinates: item.coordinates,
     })),
-  ], [trips, wishlist])
-  const visibleMarkers = markers.filter((marker) => mapFilters[marker.mapCategory])
+    ...homeLocations.filter((home) => home.coordinates).map((home) => ({
+      id: `home-${home.id}`,
+      title: home.label || home.name,
+      place: home.label ? home.name : '',
+      time: home.startDate ? formatHomeDateRange(home.startDate, home.endDate) : 'Home location',
+      mapStatus: 'home',
+      mapCategory: 'home',
+      mapMarker: 'star',
+      homeStartYear: home.startDate ? Number(home.startDate.slice(0, 4)) : undefined,
+      homeEndYear: home.endDate
+        ? Number(home.endDate.slice(0, 4))
+        : home.startDate ? firstPlanningYear : undefined,
+      locationDetails: home.details,
+      coordinates: home.coordinates,
+    })),
+  ], [trips, wishlist, homeLocations])
+  const visibleMarkers = markers.filter((marker) => (
+    mapFilters[marker.mapCategory]
+    && (!yearRange || (marker.mapCategory === 'home'
+      ? !Number.isFinite(marker.homeStartYear)
+        || (marker.homeEndYear >= yearRange.start && marker.homeStartYear <= yearRange.end)
+      : marker.year === undefined || (marker.year >= yearRange.start && marker.year <= yearRange.end)))
+  ))
   const visitedTrips = trips.filter((trip) => trip.status?.toLowerCase() === 'visited')
   const plannedTrips = trips.filter((trip) => trip.status?.toLowerCase() !== 'visited')
   const visitedWishlistCount = wishlist.filter((item) => item.status?.toLowerCase() === 'visited').length
@@ -376,17 +623,28 @@ function LifetimeOverview({
             showToolbar
             scrollWheelZoom
             mapFilters={mapFilters}
+            yearRange={yearRange}
+            yearBounds={mapYearBounds}
+            onYearRangeChange={setSelectedYearRange}
+            onYearRangeReset={() => setSelectedYearRange(null)}
             onMapFilterChange={(category) => setMapFilters((currentFilters) => ({
               ...currentFilters,
               [category]: !currentFilters[category],
             }))}
           />
-          : <p className="empty-map-message">Add a key place or unassigned wish-list place to start mapping your travel plans.</p>}
+          : <p className="empty-map-message">Add a home, trip, or wish-list place to start mapping your travel plans.</p>}
         <div className="map-legend" aria-label="Map legend">
           <span><i className="legend-dot legend-planned" /> Planned trip</span>
           <span><i className="legend-dot legend-unassigned" /> Unassigned wish list</span>
           <span><i className="legend-dot legend-visited" /> Visited</span>
+          <span><i className="legend-home" aria-hidden="true">★</i> Home</span>
         </div>
+        <HomeLocationsEditor
+          homeLocations={homeLocations}
+          onAddHomeLocation={onAddHomeLocation}
+          onUpdateHomeLocation={onUpdateHomeLocation}
+          onRemoveHomeLocation={onRemoveHomeLocation}
+        />
       </section>
 
       <section className="year-planner-section">
